@@ -1,0 +1,1 @@
+DEFAULT_TAB_SIZE = 2

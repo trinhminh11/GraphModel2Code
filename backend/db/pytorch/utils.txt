@@ -212,6 +212,7 @@ OP2CLS = {
     "*": lambda: lambda X, Y: X * Y,
     "/": lambda: lambda X, Y: X / Y,
     "@": lambda: lambda X, Y: X @ Y,
+    "T": lambda: lambda X: X.T,
 }
 
 

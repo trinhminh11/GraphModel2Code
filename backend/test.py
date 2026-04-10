@@ -47,63 +47,6 @@ from utils.import_utils import get_dependencies_str
                 ---------
 """
 
-data = {
-    "name": "testing",
-    "class_name": "Testing",
-    "kwargs": {},
-    "nodes": {
-        "networks": {
-            "mlp": {
-                "mlp_first": {
-                    "input_dim": 64,
-                    "output_dim": 128,
-                    "hidden_dims": [256, 256],
-                    "bias": True,
-                    "activation_fn": "relu",
-                },
-                "mlp_last": {
-                    "input_dim": 128,
-                    "output_dim": 10,
-                    "hidden_dims": None,
-                    "bias": True,
-                    "activation_fn": "relu",
-                },
-            },
-            "gated_net": {
-                "gated_net_1": {
-                    "input_dim": 128,
-                    "hidden_dim": 128,
-                    "output_dim": 128,
-                    "gate_act_fn": "silu",
-                    "gate_operator_fn": "*",
-                }
-            },
-        },
-        "activations": {
-            "tanh": {"tanh": {}},
-        },
-        "operators": {"add": {"add": {}}},
-        "customs": {
-            "dup": {"dup": {}},
-        },
-    },
-    "inputs": {
-        "X": ("Tensor", None),
-    },
-    "edges": [
-        ("inputs", "mlp_first", "X", "X", ("__default__")),
-        ("mlp_first", "dup", "__default__", "X", ("__default__0", "__default__1")),
-        ("dup", "gated_net_1", "__default__0", "X", ("__default__")),
-        ("gated_net_1", "add", "__default__", "X", ("__default__")),
-        ("dup", "add", "__default__0", "Y", ("__default__")),
-        ("add", "mlp_last", "__default__", "X", ("__default__")),
-        ("mlp_last", "tanh", "__default__", "input", ("__default__")),
-        ("tanh", "outputs", "__default__", None, None),
-        ("dup", "outputs", "__default__1", None, None),
-    ],
-    "dependencies": {("torch", "Tensor"), ("torch", "nn")},
-}
-
 
 class GraphNode:
     def __init__(self, node_type, node_id, node_name, level=0):
@@ -112,15 +55,18 @@ class GraphNode:
         self.node_name = node_name
         self.level = level
         self.prev: list[tuple[GraphNode, str, str]] = []
+        self.output_gates = None
 
     def add_prev(
         self,
         prev_node: "GraphNode",
         input_gate: str,
         input_receive: str,
-        output_gate: str,
     ):
-        self.prev.append((prev_node, input_gate, input_receive, output_gate))
+        self.prev.append((prev_node, input_gate, input_receive))
+
+    def update_output_gate(self, output_gates: tuple[str, ...]):
+        self.output_gates = tuple(output_gates)
 
     def __repr__(self):
         return f"GraphNode(node_name={self.node_name}, level={self.level}, prev={[(prev_tuple[0].node_name, *prev_tuple[1:]) for prev_tuple in self.prev]})"
@@ -145,7 +91,29 @@ class ExecuteGraph:
                 input_gate = (
                     f"{prev_node.node_id}_output" + edge[2][len("__default__") :]
                 )
-            child_node.add_prev(prev_node, input_gate, edge[3], edge[4])
+
+            child_node.add_prev(prev_node, input_gate, edge[3])
+
+            output_gates: tuple[str, ...] = edge[4]
+
+            output_gates_list: list[str] = []
+
+            if len(edge[4]) == 1:
+                if output_gates[0].startswith("__default__"):
+                    output_gates_list.append(f"{child_node.node_id}_output")
+                else:
+                    output_gates_list.append(output_gates[0])
+            else:
+                for output_gate in output_gates:
+                    if output_gate.startswith("__default__"):
+                        output_gates_list.append(
+                            f"{child_node.node_id}_output"
+                            + output_gate[len("__default__") :]
+                        )
+                    else:
+                        output_gates_list.append(output_gate)
+
+            child_node.update_output_gate(tuple(output_gates_list))
 
         self.calc_level()
 
@@ -173,12 +141,15 @@ class ExecuteGraph:
         return sorted_nodes[1:]  # don't need inputs node
 
 
-def add_code(node_type: Literal["customs", "networks"]) -> str:
+def add_code(node_type: Literal["customs", "networks"], data: dict) -> str:
     code = ""
     main_depends_code = set()
     code_system_dependencies = set()
     code_third_party_dependencies = set()
     code_local_dependencies = set()
+
+    print(node_type)
+    print(data["nodes"][node_type])
 
     for node_name in data["nodes"][node_type]:
         node = get_node(node_type, node_name)
@@ -275,28 +246,27 @@ class {class_name}(nn.Module):
 
         input_str = ""
         for prev_tuple in node.prev:
-            prev_node, input_gate, input_receive, output_gate = prev_tuple
+            prev_node, input_gate, input_receive = prev_tuple
             if prev_node.node_name != "inputs":
                 input_str += f"{input_receive}={input_gate}, "
             else:
                 input_str += f"{input_receive}={input_gate}, "
         input_str = input_str[:-2]
 
-        n_outputs = 1
-        if node.node_name != "inputs" and node.node_name != "outputs":
-            n_outputs = get_node(node.node_type, node.node_name).n_outputs
+        output_gates = node.output_gates
 
+        n_outputs = len(output_gates)
         if n_outputs == 1:
             main_code += (
-                f"        {node.node_id}_output = self.{node.node_id}({input_str})\n"
+                f"        {output_gates[0]} = self.{node.node_id}({input_str})\n"
             )
         else:
-            main_code += f"        {', '.join([f'{node.node_id}_output{i}' for i in range(n_outputs)])} = self.{node.node_id}({input_str})\n"
+            main_code += f"        {', '.join([f'{output_gates[i]}' for i in range(n_outputs)])} = self.{node.node_id}({input_str})\n"
 
-    networks_code, add_to_main = add_code("networks")
+    networks_code, add_to_main = add_code("networks", data)
     main_code = add_to_main + "\n" + main_code
 
-    customs_code, add_to_main = add_code("customs")
+    customs_code, add_to_main = add_code("customs", data)
     main_code = add_to_main + "\n" + main_code
 
     return {
@@ -308,9 +278,14 @@ class {class_name}(nn.Module):
 
 
 def main():
+    import json
     import os
 
     os.makedirs("temp", exist_ok=True)
+
+    with open("test_attn.json", "r") as f:
+        data = json.load(f)
+
     codes = json2code(data)
 
     for code_file, code in codes.items():

@@ -1,0 +1,49 @@
+{
+    "name": "testing",
+    "class_name": "Testing",
+    "kwargs": {},
+    "nodes": {
+        "networks": {
+            "mlp": {
+                "mlp_first": {
+                    "input_dim": 64,
+                    "output_dim": 128,
+                    "hidden_dims": [256, 256]
+                },
+                "mlp_last": {
+                    "input_dim": 128,
+                    "output_dim": 10
+                }
+            },
+            "gated_net": {
+                "gated_net_1": {
+                    "input_dim": 128,
+                    "hidden_dim": 128,
+                    "output_dim": 128
+                }
+            }
+        },
+        "activations": {
+            "tanh": {"tanh": {}}
+        },
+        "operators": {"add": {"add": {}}},
+        "customs": {
+            "dup": {"dup": {}}
+        }
+    },
+    "inputs": {
+        "X": ["Tensor", null]
+    },
+    "edges": [
+        ["inputs", "mlp_first", "X", "X", ["__default__"]],
+        ["mlp_first", "dup", "__default__", "X", ["__default__0", "out_1"]],
+        ["dup", "gated_net_1", "__default__0", "X", ["__default__"]],
+        ["gated_net_1", "add", "__default__", "X", ["__default__"]],
+        ["dup", "add", "__default__0", "Y", ["__default__"]],
+        ["add", "mlp_last", "__default__", "X", ["__default__"]],
+        ["mlp_last", "tanh", "__default__", "input", ["__default__"]],
+        ["tanh", "outputs", "__default__", null, []],
+        ["dup", "outputs", "out_1", null, []]
+    ],
+    "dependencies": [["torch", "Tensor"], ["torch", "nn"]]
+}

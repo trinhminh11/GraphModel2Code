@@ -1,0 +1,44 @@
+{
+    "name": "testing",
+    "class_name": "Testing",
+    "kwargs": {},
+    "nodes": {
+        "networks": {
+            "mlp": {
+                "q_proj": {
+                    "input_dim": 128,
+                    "bias": false
+                },
+                "k_proj": {
+                    "input_dim": 128,
+                    "bias": false
+                },
+                "v_proj": {
+                    "input_dim": 128,
+                    "bias": false
+                }
+            }
+        },
+        "activations": {
+            "softmax": {"softmax": {}}
+        },
+        "operators": {"matmul": {"matmul_qk": {}, "matmul_qkv": {}}, "transpose": {"transpose": {}}},
+        "customs": {}
+    },
+    "inputs": {
+        "X": ["Tensor", null]
+    },
+    "edges": [
+        ["inputs", "q_proj", "X", "X", ["Q"]],
+        ["inputs", "k_proj", "X", "X", ["K"]],
+        ["inputs", "v_proj", "X", "X", ["V"]],
+        ["k_proj", "transpose", "K", "X", ["KT"]],
+        ["q_proj", "matmul_qk", "Q", "X", ["Q_KT"]],
+        ["transpose", "matmul_qk", "KT", "Y", ["Q_KT"]],
+        ["matmul_qk", "softmax", "Q_KT", "input", ["attn_weights"]],
+        ["softmax", "matmul_qkv", "attn_weights", "X", ["attn_output"]],
+        ["v_proj", "matmul_qkv", "V", "Y", ["attn_output"]],
+        ["matmul_qkv", "outputs", "attn_output", null, []]
+    ],
+    "dependencies": [["torch", "Tensor"], ["torch", "nn"]]
+}

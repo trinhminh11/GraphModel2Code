@@ -73,3 +73,15 @@ register_operator(
         },
     )
 )
+
+register_operator(
+    OperatorNode(
+        display_name="Transpose",
+        name="transpose",
+        operator_symbol="T",
+        description="Transpose operator",
+        forward_kwargs={
+            "X": ("Tensor", __REQUIRED__, "The input tensor"),
+        },
+    )
+)

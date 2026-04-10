@@ -106,12 +106,16 @@ register_network(
         description="Multi-Layer Perceptron",
         class_name="MLP",
         code=code_dict["mlp"],
-        lib_dependencies=[
-            "import torch.nn as nn",
-            "from torch import Tensor",
-            "from utils import get_activation",
-            "from typing import Callable",
-        ],
+        system_dependencies={
+            ("typing", "Callable"),
+        },
+        third_party_dependencies={
+            ("torch", "nn"),
+            ("torch", "Tensor"),
+        },
+        local_dependencies={
+            ("utils", "get_activation"),
+        },
         kwargs={
             "input_dim": ("int", __REQUIRED__, "The input dimension"),
             "output_dim": (
@@ -144,13 +148,17 @@ register_network(
         description="Gated Operator (perform the operation `Y o gate(X)`) where gate is a function that takes X and returns a tensor of the same shape as Y",
         class_name="Gated",
         code=code_dict["gated"],
-        lib_dependencies=[
-            "import torch.nn as nn",
-            "from torch import Tensor",
-            "from utils import get_activation",
-            "from utils import get_operator_function",
-            "from typing import Callable",
-        ],
+        system_dependencies={
+            ("typing", "Callable"),
+        },
+        third_party_dependencies={
+            ("torch", "nn"),
+            ("torch", "Tensor"),
+        },
+        local_dependencies={
+            ("utils", "get_activation"),
+            ("utils", "get_operator_function"),
+        },
         kwargs={
             "input_dim": ("int", __REQUIRED__, "The input dimension"),
             "output_dim": (
@@ -188,13 +196,17 @@ register_network(
         description="Gated Network (perform the operation `FC( FC(X) ) o gate(X)`)",
         class_name="GatedNet",
         code=code_dict["gated_net"],
-        lib_dependencies=[
-            "import torch.nn as nn",
-            "from torch import Tensor",
-            "from utils import get_activation",
-            "from utils import get_operator_function",
-            "from typing import Callable",
-        ],
+        system_dependencies={
+            ("typing", "Callable"),
+        },
+        third_party_dependencies={
+            ("torch", "nn"),
+            ("torch", "Tensor"),
+        },
+        local_dependencies={
+            ("utils", "get_activation"),
+            ("utils", "get_operator_function"),
+        },
         node_dependencies={"gated": networks_dict["gated"]},
         kwargs={
             "input_dim": ("int", __REQUIRED__, "The input dimension"),

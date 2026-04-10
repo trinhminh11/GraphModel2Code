@@ -1,8 +1,8 @@
 from collections import deque
 from typing import Literal
-from utils import get_dependencies_str
 
 from db.pytorch import get_node, utils_code
+from utils.import_utils import get_dependencies_str
 
 """
                 ---------
@@ -67,7 +67,7 @@ data = {
                     "hidden_dims": None,
                     "bias": True,
                     "activation_fn": "relu",
-                }
+                },
             },
             "gated_net": {
                 "gated_net_1": {
@@ -101,7 +101,7 @@ data = {
         ("tanh", "outputs", "__default__", None, None),
         ("dup", "outputs", "__default__1", None, None),
     ],
-    "dependencies": {"from torch import Tensor", "import torch.nn as nn"},
+    "dependencies": {("torch", "Tensor"), ("torch", "nn")},
 }
 
 
@@ -173,6 +173,43 @@ class ExecuteGraph:
         return sorted_nodes[1:]  # don't need inputs node
 
 
+def add_code(node_type: Literal["customs", "networks"]) -> str:
+    code = ""
+    main_depends_code = set()
+    code_system_dependencies = set()
+    code_third_party_dependencies = set()
+    code_local_dependencies = set()
+
+    for node_name in data["nodes"][node_type]:
+        node = get_node(node_type, node_name)
+        node_dependencies = node.get_dependencies()
+
+        code_system_dependencies.update(node_dependencies["system_lib"])
+        code_third_party_dependencies.update(node_dependencies["third_party_lib"])
+        code_local_dependencies.update(node_dependencies["local_lib"])
+        code += node.get_creation_code()
+        main_depends_code.add(node.class_name)
+
+    code = f"""# System libraries
+{get_dependencies_str(code_system_dependencies)}
+# Third party libraries
+{get_dependencies_str(code_third_party_dependencies)}
+# Local imports
+{get_dependencies_str(code_local_dependencies)}
+{code}
+"""
+
+    additional_to_main = ""
+    if len(main_depends_code) > 0:
+        import_from_code = f"from {node_type} import "
+        for node_class_name in main_depends_code:
+            import_from_code += f"{node_class_name}, "
+        import_from_code = import_from_code[:-2]
+        additional_to_main = import_from_code
+
+    return code, additional_to_main
+
+
 def json2code(data: dict) -> str:
     class_name = data["class_name"]
     kwargs_str = ", ".join(
@@ -182,13 +219,12 @@ def json2code(data: dict) -> str:
         ]
     )
 
-    dependencies_str = "\n".join(data["dependencies"])
+    dependencies_str = get_dependencies_str(data["dependencies"])
 
     if len(data["nodes"]["activations"]) > 0:
         dependencies_str += "\nfrom utils import get_activation"
     if len(data["nodes"]["operators"]) > 0:
         dependencies_str += "\nfrom utils import get_operator_function"
-
 
     graph = ExecuteGraph(data)
 
@@ -257,39 +293,11 @@ class {class_name}(nn.Module):
         else:
             main_code += f"        {', '.join([f'{node.node_id}_output{i}' for i in range(n_outputs)])} = self.{node.node_id}({input_str})\n"
 
-    networks_code = ""
-    main_depends_networks = set()
-    networks_code_dependencies = set()
-    for node_name in data["nodes"]["networks"]:
-        node = get_node("networks", node_name)
-        networks_code_dependencies.update(node.get_dependencies())
-        networks_code += node.get_creation_code()
-        main_depends_networks.add(node.class_name)
+    networks_code, add_to_main = add_code("networks")
+    main_code = add_to_main + "\n" + main_code
 
-    networks_code = get_dependencies_str(networks_code_dependencies) + "\n" + networks_code
-
-    if len(main_depends_networks) > 0:
-        import_from_networks = "from networks import "
-        for network_class_name in main_depends_networks:
-            import_from_networks += f"{network_class_name}, "
-        import_from_networks = import_from_networks[:-2]
-        main_code = import_from_networks + "\n" + main_code
-
-    customs_code = ""
-    main_depends_customs = set()
-    customs_code_dependencies = set()
-    for node_name in data["nodes"]["customs"]:
-        node = get_node("customs", node_name)
-        customs_code += node.get_creation_code()
-        main_depends_customs.add(node.class_name)
-        customs_code_dependencies.update(node.get_dependencies())
-    customs_code = get_dependencies_str(customs_code_dependencies) + "\n" + customs_code
-    if len(main_depends_customs) > 0:
-        import_from_customs = "from customs import "
-        for custom_class_name in main_depends_customs:
-            import_from_customs += f"{custom_class_name}, "
-        import_from_customs = import_from_customs[:-2]
-        main_code = import_from_customs + "\n" + main_code
+    customs_code, add_to_main = add_code("customs")
+    main_code = add_to_main + "\n" + main_code
 
     return {
         "main.py": main_code,
@@ -301,6 +309,7 @@ class {class_name}(nn.Module):
 
 def main():
     import os
+
     os.makedirs("temp", exist_ok=True)
     codes = json2code(data)
 

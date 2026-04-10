@@ -22,10 +22,10 @@ class {class_name}(nn.Module):
     def forward(self, X: Tensor) -> Tensor:
         return X, X
 """,
-        lib_dependencies=[
-            "import torch.nn as nn",
-            "from torch import Tensor",
-        ],
+        third_party_dependencies={
+            ("torch", "nn"),
+            ("torch", "Tensor"),
+        },
         forward_kwargs={"X": ("Tensor", __REQUIRED__, "The input tensor")},
         n_outputs=2,
     )

@@ -10,8 +10,14 @@ class NodeBase(BaseModel):
     name: str
 
     description: str = Field(default=..., description="The description of the node")
-    lib_dependencies: set[str] = Field(
-        default_factory=set, description="The libraries that the node depends on"
+    system_dependencies: set[tuple[str, ...]] = Field(
+        default_factory=set, description="The libraries that the node depends on, the tuple is the dependencies of the library e.g ('os') -> import os"
+    )
+    third_party_dependencies: set[tuple[str, ...]] = Field(
+        default_factory=set, description="The libraries that the node depends on, the tuple is the dependencies of the library e.g ('torch', 'nn') -> from torch import nn"
+    )
+    local_dependencies: set[tuple[str, ...]] = Field(
+        default_factory=set, description="The libraries that the node depends on, the tuple is the dependencies of the library e.g ('utils', 'get_activation') -> from utils import get_activation"
     )
     kwargs: dict[str, tuple[str, str, str]] = Field(
         default_factory=dict,
@@ -41,9 +47,12 @@ class NodeBase(BaseModel):
 
         return ", ".join(kwargs_lst)
 
-    def get_dependencies(self) -> set[str]:
-        current_dependencies = self.lib_dependencies.copy()
-        return current_dependencies
+    def get_dependencies(self):
+        return {
+            "system_lib": self.system_dependencies.copy(),
+            "third_party_lib": self.third_party_dependencies.copy(),
+            "local_lib": self.local_dependencies.copy(),
+        }
 
     def get_var_code(self) -> str:
         raise NotImplementedError("get_var_code is not implemented for NodeBase")
@@ -138,10 +147,13 @@ class NetworkNode(NodeBase):
         return f"{self.class_name}({self.kwargs_str(**kwargs)})"
 
     def get_dependencies(self) -> set[str]:
-        current_dependencies = super().get_dependencies()
+        dependencies = super().get_dependencies()
         for node_name, node in self.node_dependencies.items():
-            current_dependencies.update(node.get_dependencies())
-        return current_dependencies
+            current_node_dependencies = node.get_dependencies()
+            dependencies["system_lib"].update(current_node_dependencies["system_lib"])
+            dependencies["third_party_lib"].update(current_node_dependencies["third_party_lib"])
+            dependencies["local_lib"].update(current_node_dependencies["local_lib"])
+        return dependencies
 
 
 class LibNode(NodeBase):
@@ -154,7 +166,7 @@ class ActivationNode(NodeBase):
     def model_post_init(self, context: Any, /) -> None:
         """Ensure that the code is specified for a ActivationNode"""
         super().model_post_init(context)
-        self.lib_dependencies.add("from utils import get_activation")
+        self.local_dependencies.add(("utils", "get_activation"))
 
     def get_var_code(self) -> str:
         """
@@ -171,7 +183,7 @@ class OperatorNode(NodeBase):
     def model_post_init(self, context: Any, /) -> None:
         """Ensure that the code is specified for a ActivationNode"""
         super().model_post_init(context)
-        self.lib_dependencies.add("from utils import get_operator_function")
+        self.local_dependencies.add(("utils", "get_operator_function"))
 
     def get_var_code(self) -> str:
         """

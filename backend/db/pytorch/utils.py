@@ -1,0 +1,260 @@
+import math
+from collections import OrderedDict
+from typing import Callable
+
+import torch
+from torch import Tensor, nn
+
+
+class GELUActivation(nn.Module):
+    """
+    Original Implementation of the GELU activation function in Google BERT repo when initially created. For
+    information: OpenAI GPT's GELU is slightly different (and gives slightly different results): 0.5 * x * (1 +
+    torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3)))) This is now written in C in nn.functional
+    Also see the Gaussian Error Linear Units paper: https://huggingface.co/papers/1606.08415
+    """
+
+    def __init__(self, use_gelu_python: bool = False):
+        super().__init__()
+        if use_gelu_python:
+            self.act = self._gelu_python
+        else:
+            self.act = nn.functional.gelu
+
+    def _gelu_python(self, X: Tensor) -> Tensor:
+        return X * 0.5 * (1.0 + torch.erf(X / math.sqrt(2.0)))
+
+    def forward(self, X: Tensor) -> Tensor:
+        return self.act(X)
+
+
+class ClippedGELUActivation(nn.Module):
+    """
+    Clip the range of possible GeLU outputs between [min, max]. This is especially useful for quantization purpose, as
+    it allows mapping negatives values in the GeLU spectrum. For more information on this trick, please refer to
+    https://huggingface.co/papers/2004.09602.
+
+    Gaussian Error Linear Unit. Original Implementation of the gelu activation function in Google Bert repo when
+    initially created.
+
+    For information: OpenAI GPT's gelu is slightly different (and gives slightly different results): 0.5 * x * (1 +
+    torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3)))). See https://huggingface.co/papers/1606.08415
+    """
+
+    def __init__(self, min: float, max: float):
+        if min > max:
+            raise ValueError(f"min should be < max (got min: {min}, max: {max})")
+
+        super().__init__()
+        self.min = min
+        self.max = max
+
+    def forward(self, X: Tensor) -> Tensor:
+        return torch.clip(GELUActivation(True)(X), self.min, self.max)
+
+
+class PytorchGELUTanh(nn.Module):
+    """
+    A fast C implementation of the tanh approximation of the GeLU activation function. See
+    https://huggingface.co/papers/1606.08415.
+
+    This implementation is equivalent to NewGELU and FastGELU but much faster. However, it is not an exact numerical
+    match due to rounding errors.
+    """
+
+    def forward(self, X: Tensor) -> Tensor:
+        return nn.functional.gelu(X, approximate="tanh")
+
+
+class NewGELUActivation(nn.Module):
+    """
+    Implementation of the GELU activation function currently in Google BERT repo (identical to OpenAI GPT). Also see
+    the Gaussian Error Linear Units paper: https://huggingface.co/papers/1606.08415
+    """
+
+    def forward(self, X: Tensor) -> Tensor:
+        return (
+            0.5
+            * X
+            * (
+                1.0
+                + torch.tanh(
+                    math.sqrt(2.0 / math.pi) * (X + 0.044715 * torch.pow(X, 3.0))
+                )
+            )
+        )
+
+
+class FastGELUActivation(nn.Module):
+    """
+    Applies GELU approximation that is slower than QuickGELU but more accurate. See: https://github.com/hendrycks/GELUs
+    """
+
+    def forward(self, X: Tensor) -> Tensor:
+        return 0.5 * X * (1.0 + torch.tanh(X * 0.7978845608 * (1.0 + 0.044715 * X * X)))
+
+
+class QuickGELUActivation(nn.Module):
+    """
+    Applies GELU approximation that is fast but somewhat inaccurate. See: https://github.com/hendrycks/GELUs
+    """
+
+    def forward(self, X: Tensor) -> Tensor:
+        return X * torch.sigmoid(1.702 * X)
+
+
+class AccurateGELUActivation(nn.Module):
+    """
+    Applies GELU approximation that is faster than default and more accurate than QuickGELU. See:
+    https://github.com/hendrycks/GELUs
+
+    Implemented along with MEGA (Moving Average Equipped Gated Attention)
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.precomputed_constant = math.sqrt(2 / math.pi)
+
+    def forward(self, X: Tensor) -> Tensor:
+        return (
+            0.5
+            * X
+            * (
+                1
+                + torch.tanh(
+                    self.precomputed_constant * (input + 0.044715 * torch.pow(input, 3))
+                )
+            )
+        )
+
+
+class MishActivation(nn.Module):
+    """
+    See Mish: A Self-Regularized Non-Monotonic Activation Function (Misra., https://huggingface.co/papers/1908.08681). Also
+    visit the official repository for the paper: https://github.com/digantamisra98/Mish
+    """
+
+    def __init__(self, use_mish_python: bool = False):
+        super().__init__()
+        if use_mish_python:
+            self.act = self._mish_python
+        else:
+            self.act = nn.functional.mish
+
+    def _mish_python(self, X: Tensor) -> Tensor:
+        return X * torch.tanh(nn.functional.softplus(X))
+
+    def forward(self, X: Tensor) -> Tensor:
+        return self.act(X)
+
+
+class LinearActivation(nn.Module):
+    """
+    Applies the linear activation function, i.e. forwarding input directly to output.
+    """
+
+    def forward(self, X: Tensor) -> Tensor:
+        return X
+
+
+class LaplaceActivation(nn.Module):
+    """
+    Applies elementwise activation based on Laplace function, introduced in MEGA as an attention activation. See
+    https://huggingface.co/papers/2209.10655
+
+    Inspired by squared relu, but with bounded range and gradient for better stability
+    """
+
+    def forward(
+        self, X: Tensor, mu: float = 0.707107, sigma: float = 0.282095
+    ) -> Tensor:
+        X = (X - mu).div(sigma * math.sqrt(2.0))
+        return 0.5 * (1.0 + torch.erf(X))
+
+
+class ReLUSquaredActivation(nn.Module):
+    """
+    Applies the relu^2 activation introduced in https://huggingface.co/papers/2109.08668v2
+    """
+
+    def forward(self, X: Tensor) -> Tensor:
+        relu_applied = nn.functional.relu(X)
+        squared = torch.square(relu_applied)
+        return squared
+
+
+ACT2CLS = {
+    "gelu": GELUActivation,
+    "gelu_fast": FastGELUActivation,
+    "gelu_new": NewGELUActivation,
+    "gelu_pytorch_tanh": PytorchGELUTanh,
+    "gelu_accurate": AccurateGELUActivation,
+    "laplace": LaplaceActivation,
+    "leaky_relu": nn.LeakyReLU,
+    "linear": LinearActivation,
+    "mish": MishActivation,
+    "clipped_gelu": ClippedGELUActivation,
+    "quick_gelu": QuickGELUActivation,
+    "relu": nn.ReLU,
+    "relu2": ReLUSquaredActivation,
+    "relu6": nn.ReLU6,
+    "sigmoid": nn.Sigmoid,
+    "silu": nn.SiLU,
+    "swish": nn.SiLU,
+    "tanh": nn.Tanh,
+    "prelu": nn.PReLU,
+    "softmax": nn.Softmax,
+}
+
+OP2CLS = {
+    "+": lambda: lambda X, Y: X + Y,
+    "-": lambda: lambda X, Y: X - Y,
+    "*": lambda: lambda X, Y: X * Y,
+    "/": lambda: lambda X, Y: X / Y,
+    "@": lambda: lambda X, Y: X @ Y,
+    "T": lambda: lambda X: X.T,
+}
+
+
+class ClassInstantier(OrderedDict):
+    def get(self, key: str, **kwargs) -> Callable:
+        content = super().__getitem__(key)
+        cls, default_kwargs = content if isinstance(content, tuple) else (content, {})
+        kwargs = {**default_kwargs, **kwargs}
+        return cls(**kwargs)
+
+
+ACT2FN = ClassInstantier(ACT2CLS)
+OP2FN = ClassInstantier(OP2CLS)
+
+
+def get_activation(
+    activation_string: str | Callable[[Tensor], Tensor], **kwargs
+) -> Callable:
+    if isinstance(activation_string, Callable):
+        return activation_string
+    elif isinstance(activation_string, str):
+        activation_string = activation_string.lower().strip()
+        if activation_string in ACT2FN:
+            return ACT2FN.get(activation_string, **kwargs)
+        raise KeyError(
+            f"function {activation_string} not found in ACT2FN mapping {list(ACT2FN.keys())}"
+        )
+    raise ValueError(
+        f"activation_string should be either a string or Callable instance, but got {type(activation_string)}"
+    )
+
+
+def get_operator_function(operator_string: str | Callable[[Tensor, Tensor], Tensor]):
+    if isinstance(operator_string, Callable):
+        return operator_string
+    elif isinstance(operator_string, str):
+        operator_string = operator_string.lower().strip()
+        if operator_string in OP2FN:
+            return OP2FN.get(operator_string)
+        raise KeyError(
+            f"function {operator_string} not found in OP2FN mapping {list(OP2FN.keys())}"
+        )
+    raise ValueError(
+        f"operator_string should be either a string or Callable instance, but got {type(operator_string)}"
+    )

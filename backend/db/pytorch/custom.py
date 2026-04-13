@@ -10,11 +10,10 @@ def register_custom_node(
     custom_dict[node.name] = node
 
 
-
 register_custom_node(
     NetworkNode(
         display_name="a Custom Duplicate Node to test a node that output 2 Tensor",
-        name = "dup",
+        name="dup",
         description="a Custom Duplicate Node to test a node that output 2 Tensor",
         class_name="Dup",
         code="""

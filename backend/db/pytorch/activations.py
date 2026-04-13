@@ -18,7 +18,7 @@ register_activation(
         kwargs={
             "use_gelu_python": (
                 "bool",
-                "False",
+                False,
                 "Whether to use the Python implementation of the GELU activation function",
             )
         },
@@ -34,12 +34,12 @@ register_activation(
         kwargs={
             "min": (
                 "float",
-                "-10",
+                -10,
                 "The minimum value of the clipped GELU activation function",
             ),
             "max": (
                 "float",
-                "10",
+                10,
                 "The maximum value of the clipped GELU activation function",
             ),
         },
@@ -94,11 +94,15 @@ register_activation(
         description="Laplace activation function, introduced in MEGA as an attention activation",
         forward_kwargs={
             "X": ("Tensor", __REQUIRED__, "The input tensor"),
-            "mu": ("float", "0.707107", "The mean of the Laplace distribution"),
+            "mu": (
+                "float",
+                0.707107,
+                "The mean of the Laplace distribution (default is 0.707107)",
+            ),
             "sigma": (
                 "float",
-                "0.282095",
-                "The standard deviation of the Laplace distribution",
+                0.282095,
+                "The standard deviation of the Laplace distribution (default is 0.282095)",
             ),
         },
     ),
@@ -123,7 +127,7 @@ register_activation(
         kwargs={
             "use_mish_python": (
                 "bool",
-                "False",
+                False,
                 "Whether to use the Python implementation of the Mish activation function",
             )
         },
@@ -161,12 +165,12 @@ register_activation(
         kwargs={
             "negative_slope": (
                 "float",
-                "0.01",
+                0.01,
                 "The negative slope of the Leaky ReLU activation function",
             ),
             "inplace": (
                 "bool",
-                "False",
+                False,
                 "Whether to perform the operation in place",
             ),
         },
@@ -182,7 +186,7 @@ register_activation(
         kwargs={
             "inplace": (
                 "bool",
-                "False",
+                False,
                 "Whether to perform the operation in place",
             )
         },
@@ -198,7 +202,7 @@ register_activation(
         kwargs={
             "inplace": (
                 "bool",
-                "False",
+                False,
                 "Whether to perform the operation in place",
             )
         },
@@ -223,7 +227,7 @@ register_activation(
         kwargs={
             "inplace": (
                 "bool",
-                "False",
+                False,
                 "Whether to perform the operation in place",
             )
         },
@@ -239,7 +243,7 @@ register_activation(
         kwargs={
             "inplace": (
                 "bool",
-                "False",
+                False,
                 "Whether to perform the operation in place",
             )
         },
@@ -264,12 +268,12 @@ register_activation(
         kwargs={
             "num_parameters": (
                 "int",
-                "1",
+                1,
                 "The number of parameters for the PReLU activation function",
             ),
             "init": (
                 "float",
-                "0.25",
+                0.25,
                 "The initial value for the PReLU activation function",
             ),
         },
@@ -282,7 +286,7 @@ register_activation(
         display_name="Softmax",
         name="softmax",
         description="Softmax activation function",
-        kwargs={"dim": ("int", "None", "The dimension to apply the softmax function")},
+        kwargs={"dim": ("int", None, "The dimension to apply the softmax function")},
         forward_kwargs={"input": ("Tensor", __REQUIRED__, "The input tensor")},
     ),
 )

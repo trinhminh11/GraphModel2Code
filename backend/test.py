@@ -3,8 +3,9 @@ from typing import Literal
 
 from db.pytorch import get_node, utils_code
 from utils.import_utils import get_dependencies_str
+from schemas.graph import Graph
 
-"""
+"""test.json
                 ---------
                 | Input |
                 ---------
@@ -47,6 +48,39 @@ from utils.import_utils import get_dependencies_str
                 ---------
 """
 
+"""test_attn.json
+                ---------
+                | Input |
+                ---------
+                    |
+            --------|--------
+         -----    -----    -----
+         |MLP|    |MLP|    |MLP|
+         -----    -----    -----
+            |       |       |
+            Q       K       V
+            |       |       |
+            |       v       |
+            |   |--------|  |
+            --->| Matmul |  |
+                |--------|  |
+                    |       |
+                    v       |
+                |--------|  |
+                |Softmax |  |
+                |--------|  |
+                    |       |
+                    v       |
+                |--------|  |
+                | Matmul |<--
+                |--------|
+                    |
+                    v
+                ----------
+                | Output |
+                ----------
+"""
+
 
 class GraphNode:
     def __init__(self, node_type, node_id, node_name, level=0):
@@ -73,47 +107,24 @@ class GraphNode:
 
 
 class ExecuteGraph:
-    def __init__(self, data: dict):
+    def __init__(self, data: Graph):
         self.nodes: dict[str, GraphNode] = {}
 
         self.nodes["inputs"] = GraphNode("inputs", "inputs", "inputs")
-        for node_type, nodes_base in data["nodes"].items():
+        for node_type, nodes_base in data.nodes.model_dump().items():
             for node_name, nodes in nodes_base.items():
                 for node_id in nodes:
                     self.nodes[node_id] = GraphNode(node_type, node_id, node_name)
         self.nodes["outputs"] = GraphNode("outputs", "outputs", "outputs")
 
-        for edge in data["edges"]:
-            prev_node = self.nodes[edge[0]]
-            child_node = self.nodes[edge[1]]
-            input_gate = edge[2]
-            if edge[2].startswith("__default__"):
-                input_gate = (
-                    f"{prev_node.node_id}_output" + edge[2][len("__default__") :]
-                )
+        for edge in data.edges:
 
-            child_node.add_prev(prev_node, input_gate, edge[3])
+            current_node = self.nodes[edge.node_name]
 
-            output_gates: tuple[str, ...] = edge[4]
+            for prev_node in edge.prev_nodes:
+                current_node.add_prev(self.nodes[prev_node.node_name], prev_node.input_gate, prev_node.input_receive)
 
-            output_gates_list: list[str] = []
-
-            if len(edge[4]) == 1:
-                if output_gates[0].startswith("__default__"):
-                    output_gates_list.append(f"{child_node.node_id}_output")
-                else:
-                    output_gates_list.append(output_gates[0])
-            else:
-                for output_gate in output_gates:
-                    if output_gate.startswith("__default__"):
-                        output_gates_list.append(
-                            f"{child_node.node_id}_output"
-                            + output_gate[len("__default__") :]
-                        )
-                    else:
-                        output_gates_list.append(output_gate)
-
-            child_node.update_output_gate(tuple(output_gates_list))
+            current_node.update_output_gate(edge.output_gates)
 
         self.calc_level()
 
@@ -141,17 +152,14 @@ class ExecuteGraph:
         return sorted_nodes[1:]  # don't need inputs node
 
 
-def add_code(node_type: Literal["customs", "networks"], data: dict) -> str:
+def add_code(node_type: Literal["customs", "networks"], data: Graph) -> str:
     code = ""
     main_depends_code = set()
     code_system_dependencies = set()
     code_third_party_dependencies = set()
     code_local_dependencies = set()
 
-    print(node_type)
-    print(data["nodes"][node_type])
-
-    for node_name in data["nodes"][node_type]:
+    for node_name in data.nodes.model_dump()[node_type]:
         node = get_node(node_type, node_name)
         node_dependencies = node.get_dependencies()
 
@@ -181,20 +189,20 @@ def add_code(node_type: Literal["customs", "networks"], data: dict) -> str:
     return code, additional_to_main
 
 
-def json2code(data: dict) -> str:
-    class_name = data["class_name"]
+def json2code(data: Graph) -> str:
+    class_name = data.class_name
     kwargs_str = ", ".join(
         [
             f"{name}: {tuple_[0]} = {tuple_[1]}"
-            for name, tuple_ in data["kwargs"].items()
+            for name, tuple_ in data.kwargs.items()
         ]
     )
 
-    dependencies_str = get_dependencies_str(data["dependencies"])
+    dependencies_str = get_dependencies_str(data.dependencies)
 
-    if len(data["nodes"]["activations"]) > 0:
+    if len(data.nodes.activations) > 0:
         dependencies_str += "\nfrom utils import get_activation"
-    if len(data["nodes"]["operators"]) > 0:
+    if len(data.nodes.operators) > 0:
         dependencies_str += "\nfrom utils import get_operator_function"
 
     graph = ExecuteGraph(data)
@@ -206,7 +214,7 @@ class {class_name}(nn.Module):
         super().__init__()
 """
 
-    for node_type, nodes_base in data["nodes"].items():
+    for node_type, nodes_base in data.nodes.model_dump().items():
         main_code += f"\n        # {node_type}\n"
         for node_name, nodes in nodes_base.items():
             for node_id, node_kwargs in nodes.items():
@@ -221,7 +229,7 @@ class {class_name}(nn.Module):
 
     input_kwargs = []
 
-    for name, tuple_ in data["inputs"].items():
+    for name, tuple_ in data.inputs.items():
         if name.startswith("__default__"):
             name = "input" + name[len("__default__") :]
 
@@ -286,7 +294,7 @@ def main():
     with open("test_attn.json", "r") as f:
         data = json.load(f)
 
-    codes = json2code(data)
+    codes = json2code(Graph(**data))
 
     for code_file, code in codes.items():
         with open(f"temp/{code_file}", "w") as f:

@@ -4,8 +4,11 @@ networks_dict: dict[str, NetworkNode] = {}
 
 
 code_dict: dict[str, str] = {
-    "mlp": """
+    "mlp": '''
 class {class_name}(nn.Module):
+    """
+    {description}
+    """
     def __init__(
         self,
         input_dim: int,
@@ -14,6 +17,14 @@ class {class_name}(nn.Module):
         bias: bool = True,
         activation_fn: str | Callable[[Tensor], Tensor] = "relu",
     ):
+        """
+        Args:
+            input_dim: The input dimension
+            output_dim: The output dimension, None means the output dimension is the same as the input dimension
+            hidden_dims: The hidden dimensions, None means no hidden layers
+            bias: Whether to use bias, default is True
+            activation_fn: The activation function, default is "relu"
+        """
         super().__init__()
 
         output_dim = output_dim if output_dim is not None else input_dim
@@ -34,9 +45,12 @@ class {class_name}(nn.Module):
 
     def forward(self, X: Tensor) -> Tensor:
         return self.net(X)
-""",
-    "gated": """
+''',
+    "gated": '''
 class {class_name}(nn.Module):
+    """
+    {description}
+    """
     def __init__(
         self,
         input_dim: int,
@@ -45,6 +59,14 @@ class {class_name}(nn.Module):
         gate_act_fn: str | Callable[[Tensor], Tensor] = "sigmoid",
         gate_operator_fn: str | Callable[[Tensor, Tensor], Tensor] = "*",
     ):
+        """
+        Args:
+            input_dim: The input dimension
+            output_dim: The output dimension, None means the output dimension is the same as the input dimension
+            bias: Whether to use bias, default is False
+            gate_act_fn: The activation function of the gate, default is "sigmoid"
+            gate_operator_fn: The operator function of the gate, default is "*"
+        """
         super().__init__()
         output_dim = output_dim if output_dim is not None else input_dim
 
@@ -59,9 +81,12 @@ class {class_name}(nn.Module):
         # X: (..., Ex)
         # Y: (..., Ey)
         return self.operator_fn(Y, self.gate(X))  # Y o gate(X)   (..., Exy)
-""",
-    "gated_net": """
+''',
+    "gated_net": '''
 class {class_name}(nn.Module):
+    """
+    {description}
+    """
     def __init__(
         self,
         input_dim: int,
@@ -71,6 +96,16 @@ class {class_name}(nn.Module):
         gate_act_fn: str | Callable[[Tensor], Tensor] = "silu",
         gate_operator_fn: str | Callable[[Tensor, Tensor], Tensor] = "*",
     ):
+        """
+        Args:
+            input_dim: The input dimension
+            hidden_dim: The hidden dimension
+            output_dim: The output dimension, None means the output dimension is the same as the input dimension
+            bias: Whether to use bias, default is False
+            gate_act_fn: The activation function of the gate, default is "silu"
+            gate_operator_fn: The operator function of the gate, default is "*"
+        """
+
         super().__init__()
         output_dim = output_dim if output_dim is not None else input_dim
 
@@ -89,7 +124,7 @@ class {class_name}(nn.Module):
         Y = self.up(X)  # Y = fc(X)
         gate_output = self.gate(X, Y)  # Y' = Y o act(X @ W (+B) )
         return self.down(gate_output)  # out = fc(Y')
-""",
+''',
 }
 
 
@@ -120,12 +155,12 @@ register_network(
             "input_dim": ("int", __REQUIRED__, "The input dimension"),
             "output_dim": (
                 "int",
-                "None",
+                None,
                 "The output dimension, None means the output dimension is the same as the input dimension",
             ),
             "hidden_dims": (
                 "list[int]",
-                "None",
+                None,
                 "list of hidden dimensions, None means no hidden layers",
             ),
             "bias": ("bool", "True", "Whether to use bias"),
@@ -163,12 +198,12 @@ register_network(
             "input_dim": ("int", __REQUIRED__, "The input dimension"),
             "output_dim": (
                 "int",
-                "None",
+                None,
                 "The output dimension, None means the output dimension is the same as the input dimension",
             ),
             "bias": (
                 "bool",
-                "False",
+                False,
                 "Whether to use bias, gate function rarely use bias",
             ),
             "gate_act_fn": (
@@ -213,12 +248,12 @@ register_network(
             "hidden_dim": ("int", __REQUIRED__, "The hidden dimension"),
             "output_dim": (
                 "int",
-                "None",
+                None,
                 "The output dimension, None means the output dimension is the same as the input dimension",
             ),
             "bias": (
                 "bool",
-                "False",
+                False,
                 "Whether to use bias, gate function rarely use bias",
             ),
             "gate_act_fn": (

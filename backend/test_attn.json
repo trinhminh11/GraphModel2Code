@@ -29,16 +29,14 @@
         "X": ["Tensor", null]
     },
     "edges": [
-        ["inputs", "q_proj", "X", "X", ["Q"]],
-        ["inputs", "k_proj", "X", "X", ["K"]],
-        ["inputs", "v_proj", "X", "X", ["V"]],
-        ["k_proj", "transpose", "K", "X", ["KT"]],
-        ["q_proj", "matmul_qk", "Q", "X", ["Q_KT"]],
-        ["transpose", "matmul_qk", "KT", "Y", ["Q_KT"]],
-        ["matmul_qk", "softmax", "Q_KT", "input", ["attn_weights"]],
-        ["softmax", "matmul_qkv", "attn_weights", "X", ["attn_output"]],
-        ["v_proj", "matmul_qkv", "V", "Y", ["attn_output"]],
-        ["matmul_qkv", "outputs", "attn_output", null, []]
+        {"prev_nodes": [{"node_name": "inputs", "input_gate": "X", "input_receive": "X"}], "node_name": "q_proj", "output_gates": ["Q"]},
+        {"prev_nodes": [{"node_name": "inputs", "input_gate": "X", "input_receive": "X"}], "node_name": "k_proj", "output_gates": ["K"]},
+        {"prev_nodes": [{"node_name": "inputs", "input_gate": "X", "input_receive": "X"}], "node_name": "v_proj", "output_gates": ["V"]},
+        {"prev_nodes": [{"node_name": "k_proj", "input_gate": "K", "input_receive": "X"}], "node_name": "transpose", "output_gates": ["KT"]},
+        {"prev_nodes": [{"node_name": "q_proj", "input_gate": "Q", "input_receive": "X"}, {"node_name": "transpose", "input_gate": "KT", "input_receive": "Y"}], "node_name": "matmul_qk", "output_gates": ["Q_KT"]},
+        {"prev_nodes": [{"node_name": "matmul_qk", "input_gate": "Q_KT", "input_receive": "input"}], "node_name": "softmax", "output_gates": ["attn_weights"]},
+        {"prev_nodes": [{"node_name": "softmax", "input_gate": "attn_weights", "input_receive": "X"}, {"node_name": "v_proj", "input_gate": "V", "input_receive": "Y"}], "node_name": "matmul_qkv", "output_gates": ["attn_output"]},
+        {"prev_nodes": [{"node_name": "matmul_qkv", "input_gate": "attn_output", "input_receive": null}], "node_name": "outputs", "output_gates": []}
     ],
     "dependencies": [["torch", "Tensor"], ["torch", "nn"]]
 }

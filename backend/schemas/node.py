@@ -1,9 +1,16 @@
-from pydantic import BaseModel, Field
-from typing import Any, TypeVar
+from pydantic import BaseModel, Field, field_validator
+import ast
+from typing import Any
 from .base import __REQUIRED__
 
-T = TypeVar("T")
 
+def validate_literal(type_: str, default: Any):
+    type_ = type_.strip()
+    if type_.startswith("Literal["):
+        literal_list = list(ast.literal_eval(type_.replace("Literal", "")))
+        if default not in literal_list:
+            return False
+    return True
 
 class NodeBase(BaseModel):
     display_name: str = Field(..., description="The name of the node to display in the UI")
@@ -19,33 +26,24 @@ class NodeBase(BaseModel):
     local_dependencies: set[tuple[str, ...]] = Field(
         default_factory=set, description="The libraries that the node depends on, the tuple is the dependencies of the library e.g ('utils', 'get_activation') -> from utils import get_activation"
     )
-    kwargs: dict[str, tuple[str, str, str]] = Field(
+    kwargs: dict[str, tuple[str, Any, str]] = Field(
         default_factory=dict,
-        description="The kwargs to use the class, the tuple[str, str, str]the first term is the type of argument in string, the second term is the default value of the argument in string, if the second term is __REQUIRED__ it's mean that this is the required input, the last term is the description of the argument",
+        description="The kwargs to use the class, the tuple[str, Any, str]the first term is the type of argument in string, the second term is the default value of the argument, if the second term is __REQUIRED__ it's mean that this is the required input, the last term is the description of the argument",
     )
-    forward_kwargs: dict[str, tuple[str, str, str]] = Field(
+    forward_kwargs: dict[str, tuple[str, Any, str]] = Field(
         default_factory=dict,
-        description="The kwargs to use the forward method, the tuple[str, str, str]the first term is the type of argument in string, the second term is the default value of the argument in string, if the second term is __REQUIRED__ it's mean that this is the required input, the last term is the description of the argument",
+        description="The kwargs to use the forward method, the tuple[str, Any, str]the first term is the type of argument in string, the second term is the default value of the argument, if the second term is __REQUIRED__ it's mean that this is the required input, the last term is the description of the argument",
     )
     n_outputs: int = Field(default=1, description="The number of outputs of the node")
 
-    def kwargs_str(self, **kwargs) -> str:
-        kwargs_lst = []
-        current_kwargs = self.kwargs.copy()
 
-        for key, value in kwargs.items():
-            current_kwargs[key] = (current_kwargs[key][0], value)
-
-        for name, tuple_ in current_kwargs.items():
-            if tuple_[1] == __REQUIRED__:
-                kwargs_lst.append(f"{name}")
-            else:
-                value = tuple_[1]
-                if tuple_[0] == "str":
-                    value = f"'{tuple_[1]}'"
-                kwargs_lst.append(f"{name}={value}")
-
-        return ", ".join(kwargs_lst)
+    @field_validator("kwargs")
+    @classmethod
+    def validate_literal_kwargs(cls, kwargs: dict[str, tuple[str, Any, str]]):
+        for key, (type_, default, _) in kwargs.items():
+            if not validate_literal(type_, default):
+                raise ValueError(f"The default value {default} is not in the literal list {type_} for the key {key}")
+        return kwargs
 
     def get_dependencies(self):
         return {
@@ -59,32 +57,6 @@ class NodeBase(BaseModel):
 
     def get_creation_code(self) -> str:
         raise NotImplementedError("get_creation_code is not implemented for NodeBase")
-
-    def get_required_init_inputs(self) -> set[str]:
-        ret = set()
-        for name, tuple_ in self.kwargs.items():
-            if tuple_[1] == __REQUIRED__:
-                ret.add(name)
-        return ret
-
-    def get_all_init_inputs(self) -> set[str]:
-        ret = set()
-        for name, tuple_ in self.kwargs.items():
-            ret.add(name)
-        return ret
-
-    def get_required_inputs(self) -> set[str]:
-        ret = set()
-        for name, tuple_ in self.forward_kwargs.items():
-            if tuple_[1] == __REQUIRED__:
-                ret.add(name)
-        return ret
-
-    def get_all_inputs(self) -> set[str]:
-        ret = set()
-        for name, tuple_ in self.forward_kwargs.items():
-            ret.add(name)
-        return ret
 
 class NetworkNode(NodeBase):
     """
@@ -122,6 +94,7 @@ class NetworkNode(NodeBase):
 
         code_str += self.code.format(
             class_name=self.class_name,
+            description=self.description,
             **{
                 node_name: node.class_name
                 for node_name, node in self.node_dependencies.items()
@@ -130,21 +103,29 @@ class NetworkNode(NodeBase):
 
         return code_str
 
-    def get_var_code(self, **kwargs) -> str:
+    def get_var_code(self, include_default_value: bool = True, **kwargs) -> str:
         """
         return the code that is used to create the variable of the class like self.a = A(b=4), this function will generate A(b=4)
         """
 
-        for key in self.get_required_init_inputs():
-            if key not in kwargs:
+        var_key: dict[str, tuple[type, Any]] = {}
+
+        for key, (type_, default, _) in self.kwargs.items():
+            if key in kwargs:               # if the key is in the kwargs, use the value from the kwargs
+                if not validate_literal(type_, kwargs[key]):
+                    raise ValueError(f"The value {kwargs[key]} is not in the literal list {type_} for the key {key} of the node {self.class_name}")
+                var_key[key] = (type_, kwargs[key])
+            elif default == __REQUIRED__:   # if the key is required and not in the kwargs, raise an error
                 raise ValueError(f"The argument {key} is required for the node {self.class_name}")
+            elif include_default_value:        # if the key is not in the kwargs and is not required, and include_default_value is True, use the default value
+                var_key[key] = (type_, default)
 
-        for key in kwargs:
-            if key not in self.get_all_init_inputs():
-                raise ValueError(f"The argument {key} is not a valid input for the node {self.class_name}")
+        kwargs_lst = []
 
+        for key, (type_, value) in var_key.items():
+            kwargs_lst.append(f"{key}={value!r}")
 
-        return f"{self.class_name}({self.kwargs_str(**kwargs)})"
+        return f"{self.class_name}({", ".join(kwargs_lst)})"
 
     def get_dependencies(self) -> set[str]:
         dependencies = super().get_dependencies()
@@ -158,7 +139,7 @@ class NetworkNode(NodeBase):
 
 class LibNode(NodeBase):
     """LibNode is a node that represents a library function that is imported from the library specified in lib_dependencies with the name specified in class_name"""
-    pass
+    class_name: str = Field(..., description="The name of the class of the library (e.g: nn.Flatten)")
 
 
 class ActivationNode(NodeBase):
@@ -172,10 +153,7 @@ class ActivationNode(NodeBase):
         """
         return the code that is used to create the activation function
         """
-        if len(self.kwargs) > 0:
-            return f"get_activation('{self.name}', {self.kwargs_str()})"
-        else:
-            return f"get_activation('{self.name}')"
+        return f"get_activation('{self.name}')"
 
 class OperatorNode(NodeBase):
     """OperatorNode is a node that represents an operator that is imported from the library specified in lib_dependencies with the name specified in name"""
@@ -189,10 +167,7 @@ class OperatorNode(NodeBase):
         """
         return the code that is used to create the operator function
         """
-        if len(self.kwargs) > 0:
-            return f"get_operator_function('{self.operator_symbol}', {self.kwargs_str()})"
-        else:
-            return f"get_operator_function('{self.operator_symbol}')"
+        return f"get_operator_function('{self.operator_symbol}')"
 
 def main():
     test = ActivationNode(name="torch").get_var_code()

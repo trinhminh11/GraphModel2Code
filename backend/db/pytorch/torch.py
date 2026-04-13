@@ -1,5 +1,6 @@
-from schemas import LibNode, __REQUIRED__
-from torch import nn
+# This file is used to register all the torch.nn modules
+
+from schemas import __REQUIRED__, LibNode
 
 torchlib_dict: dict[str, LibNode] = {}
 
@@ -107,7 +108,6 @@ register_torchlib(
 # ============================================= Non-Learnable Modules =============================================
 # Like Norm, Maxpool, etc
 
-nn.LayerNorm()
 register_torchlib(
     LibNode(
         name="layernorm",

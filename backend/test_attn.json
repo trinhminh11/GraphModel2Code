@@ -1,42 +1,194 @@
 {
     "name": "testing",
     "class_name": "Testing",
-    "kwargs": {},
+    "kwargs": {
+        "inp_dim": [
+            "int",
+            "__required__"
+        ]
+    },
     "nodes": {
-        "networks": {
-            "mlp": {
-                "q_proj": {
-                    "input_dim": 128,
-                    "bias": false
+        "modules": {
+            "mlp": [
+                {
+                    "node_id": "q_proj",
+                    "kwargs": {
+                        "input_dim": "#ref/inp_dim",
+                        "bias": false
+                    }
                 },
-                "k_proj": {
-                    "input_dim": 128,
-                    "bias": false
+                {
+                    "node_id": "k_proj",
+                    "kwargs": {
+                        "input_dim": "#ref/inp_dim",
+                        "bias": false
+                    }
                 },
-                "v_proj": {
-                    "input_dim": 128,
-                    "bias": false
+                {
+                    "node_id": "v_proj",
+                    "kwargs": {
+                        "input_dim": "#ref/inp_dim",
+                        "bias": false
+                    }
                 }
-            }
+            ]
         },
         "activations": {
-            "softmax": {"softmax": {}}
+            "softmax": [
+                {
+                    "node_id": "softmax",
+                    "kwargs": {}
+                }
+            ]
         },
-        "operators": {"matmul": {"matmul_qk": {}, "matmul_qkv": {}}, "transpose": {"transpose": {}}},
+        "operators": {
+            "matmul": [
+                {
+                    "node_id": "matmul_qk",
+                    "kwargs": {}
+                },
+                {
+                    "node_id": "matmul_qkv",
+                    "kwargs": {}
+                }
+            ],
+            "transpose": [
+                {
+                    "node_id": "transpose",
+                    "kwargs": {}
+                }
+            ]
+        },
         "customs": {}
     },
     "inputs": {
-        "X": ["Tensor", null]
+        "X": [
+            "Tensor",
+            "__required__"
+        ]
     },
     "edges": [
-        {"prev_nodes": [{"node_name": "inputs", "input_gate": "X", "input_receive": "X"}], "node_name": "q_proj", "output_gates": ["Q"]},
-        {"prev_nodes": [{"node_name": "inputs", "input_gate": "X", "input_receive": "X"}], "node_name": "k_proj", "output_gates": ["K"]},
-        {"prev_nodes": [{"node_name": "inputs", "input_gate": "X", "input_receive": "X"}], "node_name": "v_proj", "output_gates": ["V"]},
-        {"prev_nodes": [{"node_name": "k_proj", "input_gate": "K", "input_receive": "X"}], "node_name": "transpose", "output_gates": ["KT"]},
-        {"prev_nodes": [{"node_name": "q_proj", "input_gate": "Q", "input_receive": "X"}, {"node_name": "transpose", "input_gate": "KT", "input_receive": "Y"}], "node_name": "matmul_qk", "output_gates": ["Q_KT"]},
-        {"prev_nodes": [{"node_name": "matmul_qk", "input_gate": "Q_KT", "input_receive": "input"}], "node_name": "softmax", "output_gates": ["attn_weights"]},
-        {"prev_nodes": [{"node_name": "softmax", "input_gate": "attn_weights", "input_receive": "X"}, {"node_name": "v_proj", "input_gate": "V", "input_receive": "Y"}], "node_name": "matmul_qkv", "output_gates": ["attn_output"]},
-        {"prev_nodes": [{"node_name": "matmul_qkv", "input_gate": "attn_output", "input_receive": null}], "node_name": "outputs", "output_gates": []}
+        {
+            "prev_nodes": [
+                {
+                    "node_name": "inputs",
+                    "input_gate": "X",
+                    "input_receive": "X"
+                }
+            ],
+            "node_name": "q_proj",
+            "output_gates": [
+                "Q"
+            ]
+        },
+        {
+            "prev_nodes": [
+                {
+                    "node_name": "inputs",
+                    "input_gate": "X",
+                    "input_receive": "X"
+                }
+            ],
+            "node_name": "k_proj",
+            "output_gates": [
+                "K"
+            ]
+        },
+        {
+            "prev_nodes": [
+                {
+                    "node_name": "inputs",
+                    "input_gate": "X",
+                    "input_receive": "X"
+                }
+            ],
+            "node_name": "v_proj",
+            "output_gates": [
+                "V"
+            ]
+        },
+        {
+            "prev_nodes": [
+                {
+                    "node_name": "k_proj",
+                    "input_gate": "K",
+                    "input_receive": "X"
+                }
+            ],
+            "node_name": "transpose",
+            "output_gates": [
+                "KT"
+            ]
+        },
+        {
+            "prev_nodes": [
+                {
+                    "node_name": "q_proj",
+                    "input_gate": "Q",
+                    "input_receive": "X"
+                },
+                {
+                    "node_name": "transpose",
+                    "input_gate": "KT",
+                    "input_receive": "Y"
+                }
+            ],
+            "node_name": "matmul_qk",
+            "output_gates": [
+                "Q_KT"
+            ]
+        },
+        {
+            "prev_nodes": [
+                {
+                    "node_name": "matmul_qk",
+                    "input_gate": "Q_KT",
+                    "input_receive": "input"
+                }
+            ],
+            "node_name": "softmax",
+            "output_gates": [
+                "attn_weights"
+            ]
+        },
+        {
+            "prev_nodes": [
+                {
+                    "node_name": "softmax",
+                    "input_gate": "attn_weights",
+                    "input_receive": "X"
+                },
+                {
+                    "node_name": "v_proj",
+                    "input_gate": "V",
+                    "input_receive": "Y"
+                }
+            ],
+            "node_name": "matmul_qkv",
+            "output_gates": [
+                "attn_output"
+            ]
+        },
+        {
+            "prev_nodes": [
+                {
+                    "node_name": "matmul_qkv",
+                    "input_gate": "attn_output",
+                    "input_receive": null
+                }
+            ],
+            "node_name": "outputs",
+            "output_gates": []
+        }
     ],
-    "dependencies": [["torch", "Tensor"], ["torch", "nn"]]
+    "dependencies": [
+        [
+            "torch",
+            "Tensor"
+        ],
+        [
+            "torch",
+            "nn"
+        ]
+    ]
 }

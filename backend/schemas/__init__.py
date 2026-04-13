@@ -1,5 +1,5 @@
-from .node import ActivationNode, NetworkNode, NodeBase, OperatorNode, LibNode
-from .base import __REQUIRED__
+from .node import ActivationNode, ModuleNode, NodeBase, OperatorNode, LibNode
+from .base import __REQUIRED__, __ANY__
 
 
 
@@ -7,7 +7,8 @@ __all__ = [
     "NodeBase",
     "ActivationNode",
     "OperatorNode",
-    "NetworkNode",
+    "ModuleNode",
     "LibNode",
     "__REQUIRED__",
+    "__ANY__",
 ]

@@ -8,6 +8,10 @@ def register_operator(
 ):
     operators_dict[node.name] = node
 
+def get_operator(
+    name: str,
+):
+    return operators_dict[name]
 
 register_operator(
     OperatorNode(

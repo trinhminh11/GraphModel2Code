@@ -3,36 +3,62 @@
     "class_name": "Testing",
     "kwargs": {},
     "nodes": {
-        "networks": {
-            "mlp": {
-                "mlp_first": {
-                    "input_dim": 64,
-                    "output_dim": 128,
-                    "hidden_dims": [256, 256]
+        "modules": {
+            "mlp": [
+                {
+                    "node_id": "mlp_first",
+                    "kwargs": {
+                        "input_dim": 64,
+                        "output_dim": 128,
+                        "hidden_dims": [256, 256]
+                    }
                 },
-                "mlp_last": {
-                    "input_dim": 128,
-                    "output_dim": 10
+                {
+                    "node_id": "mlp_last",
+                    "kwargs": {
+                        "input_dim": 128,
+                        "output_dim": 10
+                    }
                 }
-            },
-            "gated_net": {
-                "gated_net_1": {
-                    "input_dim": 128,
-                    "hidden_dim": 128,
-                    "output_dim": 128
+            ],
+            "gated_net": [
+                {
+                    "node_id": "gated_net_1",
+                    "kwargs": {
+                        "input_dim": 128,
+                        "hidden_dim": 128,
+                        "output_dim": 128
+                    }
                 }
-            }
+            ]
         },
         "activations": {
-            "tanh": {"tanh": {}}
+            "tanh": [
+                {
+                    "node_id": "tanh",
+                    "kwargs": {}
+                }
+            ]
         },
-        "operators": {"add": {"add": {}}},
+        "operators": {
+            "add": [
+                {
+                    "node_id": "add",
+                    "kwargs": {}
+                }
+            ]
+        },
         "customs": {
-            "dup": {"dup": {}}
+            "dup": [
+                {
+                    "node_id": "dup",
+                    "kwargs": {}
+                }
+            ]
         }
     },
     "inputs": {
-        "X": ["Tensor", null]
+        "X": ["Tensor", "__required__"]
     },
     "edges": [
         {"prev_nodes": [{"node_name": "inputs", "input_gate": "X", "input_receive": "X"}], "node_name": "mlp_first", "output_gates": ["__default__"]},

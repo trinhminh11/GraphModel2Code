@@ -4,6 +4,7 @@ from typing import Literal
 from db.pytorch import get_node, utils_code
 from utils.import_utils import get_dependencies_str
 from schemas.graph import Graph
+from schemas import __REQUIRED__, __ANY__
 
 """test.json
                 ---------
@@ -111,10 +112,10 @@ class ExecuteGraph:
         self.nodes: dict[str, GraphNode] = {}
 
         self.nodes["inputs"] = GraphNode("inputs", "inputs", "inputs")
-        for node_type, nodes_base in data.nodes.model_dump().items():
+        for node_type, nodes_base in data.nodes.to_shallow_dict().items():
             for node_name, nodes in nodes_base.items():
-                for node_id in nodes:
-                    self.nodes[node_id] = GraphNode(node_type, node_id, node_name)
+                for node in nodes:
+                    self.nodes[node.node_id] = GraphNode(node_type, node.node_id, node_name)
         self.nodes["outputs"] = GraphNode("outputs", "outputs", "outputs")
 
         for edge in data.edges:
@@ -152,7 +153,7 @@ class ExecuteGraph:
         return sorted_nodes[1:]  # don't need inputs node
 
 
-def add_code(node_type: Literal["customs", "networks"], data: Graph) -> str:
+def add_code(node_type: Literal["customs", "modules"], data: Graph) -> str:
     code = ""
     main_depends_code = set()
     code_system_dependencies = set()
@@ -190,14 +191,24 @@ def add_code(node_type: Literal["customs", "networks"], data: Graph) -> str:
 
 
 def json2code(data: Graph) -> str:
-    class_name = data.class_name
-    kwargs_str = ", ".join(
-        [
-            f"{name}: {tuple_[0]} = {tuple_[1]}"
-            for name, tuple_ in data.kwargs.items()
-        ]
-    )
+    # kwargs string
+    required_kwargs_lst = []
+    optional_kwargs_lst = []
 
+    for name, (type_, default) in data.kwargs.items():
+        if type_ == __ANY__:
+            item = f"{name}"
+        else:
+            item = f"{name}: {type_}"
+
+        if default == __REQUIRED__:
+            required_kwargs_lst.append(item)
+        else:
+            optional_kwargs_lst.append(f"{item} = {default}")
+
+    kwargs_str = ", ".join(required_kwargs_lst + optional_kwargs_lst)
+
+    # dependencies string
     dependencies_str = get_dependencies_str(data.dependencies)
 
     if len(data.nodes.activations) > 0:
@@ -205,41 +216,48 @@ def json2code(data: Graph) -> str:
     if len(data.nodes.operators) > 0:
         dependencies_str += "\nfrom utils import get_operator_function"
 
-    graph = ExecuteGraph(data)
 
     main_code = f"""{dependencies_str}
 
-class {class_name}(nn.Module):
+class {data.class_name}(nn.Module):
     def __init__(self, {kwargs_str}):
         super().__init__()
 """
 
-    for node_type, nodes_base in data.nodes.model_dump().items():
+    for node_type, nodes_base in data.nodes.to_shallow_dict().items():
         main_code += f"\n        # {node_type}\n"
         for node_name, nodes in nodes_base.items():
-            for node_id, node_kwargs in nodes.items():
-                node_type: Literal["activations", "operators", "networks", "customs"]
-                node_name: str
-                node = get_node(node_type, node_name)
+            for node in nodes:
+            # for node_id, node_kwargs in nodes.items():
                 main_code += (
-                    f"        self.{node_id} = {node.get_var_code(**node_kwargs)}\n"
+                    f"        self.{node.node_id} = {get_node(node_type, node_name).get_var_code(**node.kwargs)}\n"
                 )
 
     main_code += "\n"
 
     input_kwargs = []
 
-    for name, tuple_ in data.inputs.items():
+    for name, (type_, default) in data.inputs.items():
         if name.startswith("__default__"):
             name = "input" + name[len("__default__") :]
 
-        if tuple_[1] is None:
-            input_kwargs.append(f"{name}: {tuple_[0]}")
+        if type_ == __ANY__:
+            inp_str = f"{name}"
         else:
-            input_kwargs.append(f"{name}: {tuple_[0]} = {tuple_[1]}")
+            inp_str = f"{name}: {type_}"
 
+        if default == __REQUIRED__:
+            input_kwargs.append(inp_str)
+        else:
+            input_kwargs.append(f"{inp_str} = {default}")
+
+
+
+    # forward method
     initial_inputs_str = ", ".join(input_kwargs)
     main_code += f"    def forward(self, {initial_inputs_str}):\n"
+
+    graph = ExecuteGraph(data)
 
     for node in graph.return_by_level():
         if node.node_name == "outputs":
@@ -271,7 +289,7 @@ class {class_name}(nn.Module):
         else:
             main_code += f"        {', '.join([f'{output_gates[i]}' for i in range(n_outputs)])} = self.{node.node_id}({input_str})\n"
 
-    networks_code, add_to_main = add_code("networks", data)
+    modules_code, add_to_main = add_code("modules", data)
     main_code = add_to_main + "\n" + main_code
 
     customs_code, add_to_main = add_code("customs", data)
@@ -280,7 +298,7 @@ class {class_name}(nn.Module):
     return {
         "main.py": main_code,
         "utils.py": utils_code,
-        "networks.py": networks_code,
+        "modules.py": modules_code,
         "customs.py": customs_code,
     }
 

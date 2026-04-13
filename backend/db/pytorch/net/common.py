@@ -1,7 +1,6 @@
-from schemas import NetworkNode, __REQUIRED__
+from schemas import __REQUIRED__, ModuleNode
 
-networks_dict: dict[str, NetworkNode] = {}
-
+from .state import register_module, get_module
 
 code_dict: dict[str, str] = {
     "mlp": '''
@@ -128,14 +127,8 @@ class {class_name}(nn.Module):
 }
 
 
-def register_network(
-    node: NetworkNode,
-):
-    networks_dict[node.name] = node
-
-
-register_network(
-    NetworkNode(
+register_module(
+    ModuleNode(
         display_name="MLP",
         name="mlp",
         description="Multi-Layer Perceptron",
@@ -176,8 +169,8 @@ register_network(
     )
 )
 
-register_network(
-    NetworkNode(
+register_module(
+    ModuleNode(
         display_name="Gated",
         name="gated",
         description="Gated Operator (perform the operation `Y o gate(X)`) where gate is a function that takes X and returns a tensor of the same shape as Y",
@@ -224,8 +217,8 @@ register_network(
     )
 )
 
-register_network(
-    NetworkNode(
+register_module(
+    ModuleNode(
         display_name="Gated Network",
         name="gated_net",
         description="Gated Network (perform the operation `FC( FC(X) ) o gate(X)`)",
@@ -242,7 +235,7 @@ register_network(
             ("utils", "get_activation"),
             ("utils", "get_operator_function"),
         },
-        node_dependencies={"gated": networks_dict["gated"]},
+        node_dependencies={"gated": get_module("gated")},
         kwargs={
             "input_dim": ("int", __REQUIRED__, "The input dimension"),
             "hidden_dim": ("int", __REQUIRED__, "The hidden dimension"),

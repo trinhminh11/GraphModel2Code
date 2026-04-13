@@ -1,6 +1,6 @@
-from .common import networks_dict, register_network
+from .common import get_module, register_module
 
 __all__ = [
-    "networks_dict",
-    "register_network",
+    "get_module",
+    "register_module",
 ]

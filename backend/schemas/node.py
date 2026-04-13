@@ -58,9 +58,9 @@ class NodeBase(BaseModel):
     def get_creation_code(self) -> str:
         raise NotImplementedError("get_creation_code is not implemented for NodeBase")
 
-class NetworkNode(NodeBase):
+class ModuleNode(NodeBase):
     """
-    The NetworkNode is a node the represents a network that are created by the code specified in the properties.code.
+    The ModuleNode is a node the represents a module that are created by the code specified in the properties.code.
 
     class_name: use to defined the class name of the node, properties.code.format(class_name=class_name)
     node_dependencies: that mean if the code inside this Node need the creation of another Node, you can use the node_dependencies to define the dependencies.
@@ -71,15 +71,10 @@ class NetworkNode(NodeBase):
         ...,
         description="The code of the node, if empty, the node is a function import from the library specified in lib_dependencies with the name specified in class_name",
     )
-    node_dependencies: dict[str, NetworkNode] = Field(
+    node_dependencies: dict[str, ModuleNode] = Field(
         default_factory=dict, description="The nodes that the node depends on"
     )
 
-    def model_post_init(self, context: Any, /) -> None:
-        """Ensure that the code is specified for a NetworkNode"""
-        super().model_post_init(context)
-        if self.code is None:
-            raise ValueError("Code is required for a NetworkNode")
 
     def get_creation_code(self) -> str:
         """
@@ -103,7 +98,7 @@ class NetworkNode(NodeBase):
 
         return code_str
 
-    def get_var_code(self, include_default_value: bool = True, **kwargs) -> str:
+    def get_var_code(self, include_default_value: bool = False, **kwargs) -> str:
         """
         return the code that is used to create the variable of the class like self.a = A(b=4), this function will generate A(b=4)
         """
@@ -114,6 +109,7 @@ class NetworkNode(NodeBase):
             if key in kwargs:               # if the key is in the kwargs, use the value from the kwargs
                 if not validate_literal(type_, kwargs[key]):
                     raise ValueError(f"The value {kwargs[key]} is not in the literal list {type_} for the key {key} of the node {self.class_name}")
+
                 var_key[key] = (type_, kwargs[key])
             elif default == __REQUIRED__:   # if the key is required and not in the kwargs, raise an error
                 raise ValueError(f"The argument {key} is required for the node {self.class_name}")
@@ -123,7 +119,11 @@ class NetworkNode(NodeBase):
         kwargs_lst = []
 
         for key, (type_, value) in var_key.items():
-            kwargs_lst.append(f"{key}={value!r}")
+            if isinstance(value, str) and value.startswith("#ref/"):
+                ref_key = value[len("#ref/"):]
+                kwargs_lst.append(f"{key}={ref_key}")
+            else:
+                kwargs_lst.append(f"{key}={value!r}")
 
         return f"{self.class_name}({", ".join(kwargs_lst)})"
 

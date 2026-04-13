@@ -1,16 +1,22 @@
 from pydantic import BaseModel, Field, model_validator
-from typing import Any
+from typing import Any, Literal
+
+class NodeProperties(BaseModel):
+    node_id: str
+    kwargs: dict[str, Any] = Field(default_factory=dict, description="The kwargs of the node, to use the reference of the kwargs (e.g: def __init__(self, inp_dim=128) and later: self.net = MLP(input_dim=inp_dim)), use the format #ref/key")
 
 
 class Nodes(BaseModel):
-    networks: dict[str, dict[str, dict]] = Field(default_factory=dict, description="The networks of the node, key is the network name, value is a dict of key -> node_id, value -> node_kwargs")
-    activations: dict[str, dict[str, dict]] = Field(default_factory=dict, description="The activations of the node, key is the activation name, value is a dict of key -> node_id, value -> node_kwargs")
-    operators: dict[str, dict[str, dict]] = Field(default_factory=dict, description="The operators of the node, key is the operator name, value is a dict of key -> node_id, value -> node_kwargs")
-    customs: dict[str, dict[str, dict]] = Field(default_factory=dict, description="The customs of the node, key is the custom name, value is a dict of key -> node_id, value -> node_kwargs")
+    modules: dict[str, list[NodeProperties]] = Field(default_factory=dict, description="This node is a pre-defined neural network architecture from the system")
+    activations: dict[str, list[NodeProperties]] = Field(default_factory=dict, description="This node is a pre-defined activation function from the system")
+    operators: dict[str, list[NodeProperties]] = Field(default_factory=dict, description="This node is a pre-defined operator from the system")
 
-    def to_shallow_dict(self):
+    customs: dict[str, list[NodeProperties]] = Field(default_factory=dict, description="This node is a custom code that can be anything, defined by the system")
+
+
+    def to_shallow_dict(self) -> dict[Literal["modules", "activations", "operators", "customs"], dict[str, list[NodeProperties]]]:
         return {
-            "networks": self.networks,
+            "modules": self.modules,
             "activations": self.activations,
             "operators": self.operators,
             "customs": self.customs,
@@ -49,8 +55,8 @@ class Edge(BaseModel):
 class Graph(BaseModel):
     name: str
     class_name: str
-    kwargs: dict[str, Any]
+    kwargs: dict[str, tuple[str, Any]] = Field(default_factory=dict, description="The kwargs of the graph, the tuple is the type of the kwargs and the default value of the kwargs, if the default value is `__required__`, the kwargs is required")
     nodes: Nodes
-    inputs: dict[str, tuple[str, str | None]]
+    inputs: dict[str, tuple[str, Any]] = Field(default_factory=dict, description="The inputs of the graph, the tuple is the type of the input and the default value of the input, if the default value is `__required__`, the input is required")
     edges: list[Edge]
-    dependencies: set[tuple[str, ...]]
+    dependencies: set[tuple[str, ...]] = Field(default_factory=set, description="The dependencies of the graph, the tuple is the dependencies of the library e.g ('torch', 'nn') -> from torch import nn")

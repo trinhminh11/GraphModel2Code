@@ -8,6 +8,10 @@ def register_activation(
 ):
     activations_dict[node.name] = node
 
+def get_activation(
+    name: str,
+):
+    return activations_dict[name]
 
 # ============================================= Pre-defined activations =============================================
 register_activation(

@@ -30,6 +30,12 @@
                         "output_dim": 128
                     }
                 }
+            ],
+            "dup": [
+                {
+                    "node_id": "dup",
+                    "kwargs": {}
+                }
             ]
         },
         "activations": {
@@ -44,14 +50,6 @@
             "add": [
                 {
                     "node_id": "add",
-                    "kwargs": {}
-                }
-            ]
-        },
-        "customs": {
-            "dup": [
-                {
-                    "node_id": "dup",
                     "kwargs": {}
                 }
             ]

@@ -8,10 +8,9 @@ Note: Graph and its related models (Nodes, Edge, etc.) are accessed directly
 via `schemas.graph` and are not re-exported here.
 """
 
-from .node import ActivationNode, ModuleNode, NodeBase, OperatorNode, LibNode
-from .base import __REQUIRED__, __ANY__
-
-
+from .base import __ANY__, __REQUIRED__
+from .graph import Graph
+from .node import ActivationNode, LibNode, ModuleNode, NodeBase, OperatorNode
 
 __all__ = [
     "NodeBase",
@@ -19,6 +18,7 @@ __all__ = [
     "OperatorNode",
     "ModuleNode",
     "LibNode",
+    "Graph",
     "__REQUIRED__",
     "__ANY__",
 ]

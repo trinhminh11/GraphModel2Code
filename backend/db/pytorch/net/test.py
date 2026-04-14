@@ -6,26 +6,13 @@ module/activation/operator categories. They are registered as ModuleNode
 instances and looked up by name via ``get_custom(name)``.
 """
 
-from schemas import ModuleNode, NodeBase, __REQUIRED__
+from schemas import ModuleNode, __REQUIRED__
+from .state import register_module
 
 
-custom_dict: dict[str, NodeBase] = {}
 
 
-def register_custom_node(
-    node: NodeBase,
-):
-    """Add a custom NodeBase (or subclass) to the global registry, keyed by its name."""
-    custom_dict[node.name] = node
-
-def get_custom(
-    name: str,
-):
-    """Retrieve a registered custom node by name. Raises KeyError if not found."""
-    return custom_dict[name]
-
-
-register_custom_node(
+register_module(
     ModuleNode(
         display_name="Dup",
         name="dup",
@@ -42,5 +29,6 @@ class {class_name}(nn.Module):
         },
         forward_kwargs={"X": ("Tensor", __REQUIRED__, "The input tensor to duplicate")},
         n_outputs=2,
+        code_file=("test", ),
     )
 )

@@ -385,9 +385,12 @@ def get_logger(
         log_folder=log_folder,
     )
 
+logger = get_logger(
+    name="graph2code"
+)
+
 
 def main():
-    logger = get_logger()
     logger.info("Hello, world!")
     logger.warning("Warning message")
     logger.error("Error message")
@@ -396,8 +399,6 @@ def main():
     logger.info("Info message")
     logger.warning("Warning message")
     logger.error("Error message")
-
-
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@
 PyTorch node registry -- the single entry point for looking up any node by
 category and name.
 
-Loads all sub-registries (activations, operators, modules, customs) on import
+Loads all sub-registries (activations, operators, modules) on import
 and exposes ``get_node(node_type, node_name)`` as a unified dispatcher.
 
 Also reads ``utils.txt`` into ``utils_code`` so the code generator can emit
@@ -11,10 +11,9 @@ a self-contained ``utils.py`` in the output project.
 
 from typing import Literal, overload
 
-from schemas import ActivationNode, ModuleNode, NodeBase, OperatorNode
+from schemas import ActivationNode, ModuleNode, OperatorNode
 
 from .activations import get_activation, register_activation
-from .custom import get_custom, register_custom_node
 from .net import get_module, register_module
 from .operators import get_operator, register_operator
 
@@ -29,12 +28,10 @@ def get_node(node_type: Literal["activations"], node_name: str) -> ActivationNod
 def get_node(node_type: Literal["operators"], node_name: str) -> OperatorNode: ...
 @overload
 def get_node(node_type: Literal["modules"], node_name: str) -> ModuleNode: ...
-@overload
-def get_node(node_type: Literal["customs"], node_name: str) -> NodeBase: ...
 
 
 def get_node(
-    node_type: Literal["activations", "operators", "modules", "customs"],
+    node_type: Literal["activations", "operators", "modules"],
     node_name: str,
 ):
     """Dispatch to the appropriate sub-registry based on *node_type* and return the matching node definition."""
@@ -44,18 +41,16 @@ def get_node(
         return get_operator(node_name)
     elif node_type == "modules":
         return get_module(node_name)
-    elif node_type == "customs":
-        return get_custom(node_name)
+    else:
+        raise ValueError(f"Invalid node type: {node_type}")
 
 
 __all__ = [
     "register_activation",
     "register_operator",
     "register_module",
-    "register_custom_node",
     "get_operator",
     "get_module",
-    "get_custom",
     "get_node",
     "utils_code",
 ]

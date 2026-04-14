@@ -2,7 +2,7 @@
 Pydantic models for the graph structure that describes a neural network.
 
 A Graph is the top-level container holding:
-  - categorized node instances (modules, activations, operators, customs)
+  - categorized node instances (modules, activations, operators)
   - edges wiring nodes together via input/output gates
   - constructor kwargs and forward-pass inputs for the generated nn.Module
   - third-party dependency declarations
@@ -39,19 +39,14 @@ class Nodes(BaseModel):
         default_factory=dict,
         description="Mathematical operator nodes (e.g. add, matmul). Key is the operator name in the registry, value is a list of instances",
     )
-    customs: dict[str, list[NodeProperties]] = Field(
-        default_factory=dict,
-        description="Custom user-defined nodes (e.g. Dup). Key is the custom node name in the registry, value is a list of instances",
-    )
 
 
-    def to_shallow_dict(self) -> dict[Literal["modules", "activations", "operators", "customs"], dict[str, list[NodeProperties]]]:
+    def to_shallow_dict(self) -> dict[Literal["modules", "activations", "operators"], dict[str, list[NodeProperties]]]:
         """Return all four node categories as a plain dict keyed by category name."""
         return {
             "modules": self.modules,
             "activations": self.activations,
             "operators": self.operators,
-            "customs": self.customs,
         }
 
 
@@ -129,7 +124,7 @@ class Graph(BaseModel):
     )
     nodes: Nodes = Field(
         ...,
-        description="All node instances in the graph, grouped by category (modules, activations, operators, customs)",
+        description="All node instances in the graph, grouped by category (modules, activations, operators)",
     )
     inputs: dict[str, tuple[str, Any]] = Field(
         default_factory=dict,

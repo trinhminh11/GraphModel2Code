@@ -175,6 +175,7 @@ register_module(
         forward_kwargs={
             "X": ("Tensor", __REQUIRED__, "The input tensor"),
         },
+        code_file=("common", ),
     )
 )
 
@@ -223,6 +224,7 @@ register_module(
             "X": ("Tensor", __REQUIRED__, "The input tensor"),
             "Y": ("Tensor", __REQUIRED__, "The output tensor"),
         },
+        code_file=("common", ),
     )
 )
 
@@ -239,10 +241,6 @@ register_module(
         third_party_dependencies={
             ("torch", "nn"),
             ("torch", "Tensor"),
-        },
-        local_dependencies={
-            ("utils", "get_activation"),
-            ("utils", "get_operator_function"),
         },
         node_dependencies={"gated": get_module("gated")},
         kwargs={
@@ -272,5 +270,6 @@ register_module(
         forward_kwargs={
             "X": ("Tensor", __REQUIRED__, "The input tensor"),
         },
+        code_file=("common", ),
     )
 )

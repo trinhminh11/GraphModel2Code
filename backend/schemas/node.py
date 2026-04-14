@@ -141,15 +141,20 @@ class ModuleNode(NodeBase):
         description="Map of placeholder name -> ModuleNode for nodes whose classes must be generated before this one",
     )
 
+    code_file: tuple[str, ...] = Field(
+        default=...,
+        description="the tuple that guide the code generator to generate the code for this module (e.g (net, common) -> net/common.py)",
+    )
+
 
     def get_creation_code(self) -> str:
         """Return the full class source for this module, including any dependency classes prepended."""
         code_str = ""
-        for name, node in self.node_dependencies.items():
-            current_code = node.get_creation_code()
-            if current_code is not None:
-                code_str += current_code
-                code_str += "\n"
+        # for name, node in self.node_dependencies.items():
+        #     current_code = node.get_creation_code()
+        #     if current_code is not None:
+        #         code_str += current_code
+        #         code_str += "\n"
 
         code_str += self.code.format(
             class_name=self.class_name,
@@ -193,14 +198,19 @@ class ModuleNode(NodeBase):
 
         return f"{self.class_name}({", ".join(kwargs_lst)})"
 
-    def get_dependencies(self) -> set[str]:
+    def get_dependencies(self, code_root: tuple[str, ...] = None):
         """Merge this node's dependencies with all transitive ``node_dependencies``."""
         dependencies = super().get_dependencies()
+        dependencies["code_dependencies"] = set()
+        code_root = code_root if code_root is not None else tuple()
+
         for node_name, node in self.node_dependencies.items():
-            current_node_dependencies = node.get_dependencies()
-            dependencies["system_lib"].update(current_node_dependencies["system_lib"])
-            dependencies["third_party_lib"].update(current_node_dependencies["third_party_lib"])
-            dependencies["local_lib"].update(current_node_dependencies["local_lib"])
+            dependencies["code_dependencies"] = set([(*code_root, *node.code_file, node.class_name), ])
+            # current_node_dependencies = node.get_dependencies()
+            # dependencies["code_dependencies"].update(current_node_dependencies["code_dependencies"])
+            # dependencies["system_lib"].update(current_node_dependencies["system_lib"])
+            # dependencies["third_party_lib"].update(current_node_dependencies["third_party_lib"])
+            # dependencies["local_lib"].update(current_node_dependencies["local_lib"])
         return dependencies
 
 

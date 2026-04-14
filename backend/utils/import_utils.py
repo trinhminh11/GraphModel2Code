@@ -94,7 +94,7 @@ class DependencyTree:
     def simple_import_code(self):
         "function to generate the import code for the dependencies"
 
-        ret = []
+        ret: list[list[str]] = []
 
         def _dfs(node: DependencyNode, dependencies: list[str]) -> None:
             current_dependencies = dependencies.copy()
@@ -115,18 +115,27 @@ class DependencyTree:
 
         return ret
 
-    def generate_import_code(self):
+    def generate_import_code(self, add_dot: bool = False):
         import_list = self.simple_import_code()
 
         ret = ""
         for dependencies in import_list:
-            ret += "from " + ".".join(dependencies[:-1]) + " import " + dependencies[-1] + "\n"
+            if add_dot:
+                if len(dependencies) == 1:
+                    ret += "from . import " + dependencies[0] + "\n"
+                else:
+                    ret += "from ." + ".".join(dependencies[:-1]) + " import " + dependencies[-1] + "\n"
+            else:
+                if len(dependencies) == 1:
+                    ret += "import " + dependencies[0] + "\n"
+                else:
+                    ret += "from " + ".".join(dependencies[:-1]) + " import " + dependencies[-1] + "\n"
 
         return ret
 
-def get_dependencies_str(dependencies: Sequence[Sequence[str]]) -> str:
+def get_dependencies_str(dependencies: Sequence[Sequence[str]], add_dot: bool = False) -> str:
     tree = DependencyTree().add_dependencies(dependencies)
-    return tree.generate_import_code()
+    return tree.generate_import_code(add_dot)
 
 def main():
     test = [["torch", "nn"], ["torch", "Tensor"], ["torch", "nn", "functional as F"], ["torch", "nn", "Module"]]

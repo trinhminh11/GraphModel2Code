@@ -1,3 +1,13 @@
+"""
+Pydantic models for node definitions in the graph-to-code system.
+
+Defines the base schema (NodeBase) and its specializations:
+  - ModuleNode:     custom nn.Module with inline code template and dependencies
+  - LibNode:        a library-provided class (e.g. nn.Flatten) with no custom code
+  - ActivationNode: an activation function resolved at runtime via get_activation()
+  - OperatorNode:   a binary/unary operator resolved at runtime via get_operator_function()
+"""
+
 from __future__ import annotations
 
 from pydantic import BaseModel, Field, field_validator
@@ -7,6 +17,11 @@ from .base import __REQUIRED__
 
 
 def validate_literal(type_: str, default: Any):
+    """Check that *default* is a valid member of *type_* when *type_* is a ``Literal[...]`` string.
+
+    Returns False if *default* is not among the allowed literal values,
+    True otherwise (including when *type_* is not a Literal).
+    """
     type_ = type_.strip()
     if type_.startswith("Literal["):
         literal_list = list(ast.literal_eval(type_.replace("Literal", "")))
@@ -15,39 +30,82 @@ def validate_literal(type_: str, default: Any):
     return True
 
 class NodeBase(BaseModel):
-    display_name: str = Field(..., description="The name of the node to display in the UI")
-    name: str
+    """Base schema shared by every node type in the system.
 
-    description: str = Field(default=..., description="The description of the node")
+    Carries display metadata, dependency declarations, constructor kwargs,
+    forward-pass kwargs, and the number of output tensors.
+    """
+
+    display_name: str = Field(
+        ...,
+        description="Human-readable label shown in the UI for this node",
+    )
+    name: str = Field(
+        ...,
+        description="Internal identifier used to look up this node in the registry",
+    )
+
+    description: str = Field(
+        default=...,
+        description="Brief explanation of the node's purpose, shown in the UI and embedded in generated docstrings",
+    )
     system_dependencies: set[tuple[str, ...]] = Field(
-        default_factory=set, description="The libraries that the node depends on, the tuple is the dependencies of the library e.g ('os') -> import os"
+        default_factory=set,
+        description="Standard-library imports required by this node. Each tuple maps to an import statement, e.g. ('os',) -> import os, ('typing', 'Callable') -> from typing import Callable",
     )
     third_party_dependencies: set[tuple[str, ...]] = Field(
-        default_factory=set, description="The libraries that the node depends on, the tuple is the dependencies of the library e.g ('torch', 'nn') -> from torch import nn"
+        default_factory=set,
+        description="Third-party package imports required by this node. Each tuple maps to an import statement, e.g. ('torch', 'nn') -> from torch import nn",
     )
     local_dependencies: set[tuple[str, ...]] = Field(
-        default_factory=set, description="The libraries that the node depends on, the tuple is the dependencies of the library e.g ('utils', 'get_activation') -> from utils import get_activation"
+        default_factory=set,
+        description="Project-local imports required by this node. Each tuple maps to an import statement, e.g. ('utils', 'get_activation') -> from utils import get_activation",
     )
     kwargs: dict[str, tuple[str, Any, str]] = Field(
         default_factory=dict,
-        description="The kwargs to use the class, the tuple[str, Any, str]the first term is the type of argument in string, the second term is the default value of the argument, if the second term is __REQUIRED__ it's mean that this is the required input, the last term is the description of the argument",
+        description=(
+            "Constructor arguments for this node. "
+            "Each value is a 3-tuple (type_str, default, description): "
+            "type_str is the Python type as a string, "
+            "default is the default value (use __REQUIRED__ for mandatory args), "
+            "and description explains the argument"
+        ),
     )
     forward_kwargs: dict[str, tuple[str, Any, str]] = Field(
         default_factory=dict,
-        description="The kwargs to use the forward method, the tuple[str, Any, str]the first term is the type of argument in string, the second term is the default value of the argument, if the second term is __REQUIRED__ it's mean that this is the required input, the last term is the description of the argument",
+        description=(
+            "Forward-pass arguments for this node. "
+            "Each value is a 3-tuple (type_str, default, description): "
+            "type_str is the Python type as a string, "
+            "default is the default value (use __REQUIRED__ for mandatory args), "
+            "and description explains the argument"
+        ),
     )
-    n_outputs: int = Field(default=1, description="The number of outputs of the node")
+    n_outputs: int = Field(
+        default=1,
+        description="Number of output tensors this node produces (>1 for fan-out nodes like Dup)",
+    )
 
 
     @field_validator("kwargs")
     @classmethod
     def validate_literal_kwargs(cls, kwargs: dict[str, tuple[str, Any, str]]):
+        """Ensure that every kwarg whose type is ``Literal[...]`` has a default that belongs to that literal set."""
         for key, (type_, default, _) in kwargs.items():
             if not validate_literal(type_, default):
                 raise ValueError(f"The default value {default} is not in the literal list {type_} for the key {key}")
         return kwargs
 
+    @property
+    def n_required_inputs(self) -> int:
+        return sum(1 for _, (_, default, _) in self.forward_kwargs.items() if default == __REQUIRED__)
+
+    @property
+    def n_inputs(self) -> int:
+        return len(self.forward_kwargs)
+
     def get_dependencies(self):
+        """Return a dict of copied dependency sets, keyed by 'system_lib', 'third_party_lib', 'local_lib'."""
         return {
             "system_lib": self.system_dependencies.copy(),
             "third_party_lib": self.third_party_dependencies.copy(),
@@ -61,27 +119,31 @@ class NodeBase(BaseModel):
         raise NotImplementedError("get_creation_code is not implemented for NodeBase")
 
 class ModuleNode(NodeBase):
-    """
-    The ModuleNode is a node the represents a module that are created by the code specified in the properties.code.
+    """A node backed by a custom ``nn.Module`` whose source is stored in ``code``.
 
-    class_name: use to defined the class name of the node, properties.code.format(class_name=class_name)
-    node_dependencies: that mean if the code inside this Node need the creation of another Node, you can use the node_dependencies to define the dependencies.
+    ``code`` is a string template that uses ``{class_name}``, ``{description}``,
+    and any keys from ``node_dependencies`` as format placeholders.
+
+    ``node_dependencies`` lists other ModuleNodes whose generated classes must
+    be emitted before this one (transitive code dependencies).
     """
 
-    class_name: str = Field(..., description="The name of the class of the node")
+    class_name: str = Field(
+        ...,
+        description="Python class name used in the generated code (e.g. 'MLP', 'GatedNet')",
+    )
     code: str = Field(
         ...,
-        description="The code of the node, if empty, the node is a function import from the library specified in lib_dependencies with the name specified in class_name",
+        description="Python source template for the nn.Module class. Format placeholders: {class_name}, {description}, and dependency class names",
     )
     node_dependencies: dict[str, ModuleNode] = Field(
-        default_factory=dict, description="The nodes that the node depends on"
+        default_factory=dict,
+        description="Map of placeholder name -> ModuleNode for nodes whose classes must be generated before this one",
     )
 
 
     def get_creation_code(self) -> str:
-        """
-        return the code that is used to create the class
-        """
+        """Return the full class source for this module, including any dependency classes prepended."""
         code_str = ""
         for name, node in self.node_dependencies.items():
             current_code = node.get_creation_code()
@@ -101,21 +163,23 @@ class ModuleNode(NodeBase):
         return code_str
 
     def get_var_code(self, include_default_value: bool = False, **kwargs) -> str:
-        """
-        return the code that is used to create the variable of the class like self.a = A(b=4), this function will generate A(b=4)
+        """Build an instantiation expression like ``ClassName(arg=value, ...)``.
+
+        Resolves ``#ref/key`` strings to bare variable references and
+        validates Literal constraints on supplied values.
         """
 
         var_key: dict[str, tuple[type, Any]] = {}
 
         for key, (type_, default, _) in self.kwargs.items():
-            if key in kwargs:               # if the key is in the kwargs, use the value from the kwargs
+            if key in kwargs:
                 if not validate_literal(type_, kwargs[key]):
                     raise ValueError(f"The value {kwargs[key]} is not in the literal list {type_} for the key {key} of the node {self.class_name}")
 
                 var_key[key] = (type_, kwargs[key])
-            elif default == __REQUIRED__:   # if the key is required and not in the kwargs, raise an error
+            elif default == __REQUIRED__:
                 raise ValueError(f"The argument {key} is required for the node {self.class_name}")
-            elif include_default_value:        # if the key is not in the kwargs and is not required, and include_default_value is True, use the default value
+            elif include_default_value:
                 var_key[key] = (type_, default)
 
         kwargs_lst = []
@@ -130,6 +194,7 @@ class ModuleNode(NodeBase):
         return f"{self.class_name}({", ".join(kwargs_lst)})"
 
     def get_dependencies(self) -> set[str]:
+        """Merge this node's dependencies with all transitive ``node_dependencies``."""
         dependencies = super().get_dependencies()
         for node_name, node in self.node_dependencies.items():
             current_node_dependencies = node.get_dependencies()
@@ -140,35 +205,44 @@ class ModuleNode(NodeBase):
 
 
 class LibNode(NodeBase):
-    """LibNode is a node that represents a library function that is imported from the library specified in lib_dependencies with the name specified in class_name"""
-    class_name: str = Field(..., description="The name of the class of the library (e.g: nn.Flatten)")
+    """A node representing a library-provided class (e.g. ``nn.Flatten``).
+
+    Unlike ModuleNode, LibNode has no inline ``code`` -- it is simply imported
+    from the library specified in the dependency sets.
+    """
+    class_name: str = Field(
+        ...,
+        description="Fully-qualified or short name of the library class (e.g. 'nn.Flatten')",
+    )
 
 
 class ActivationNode(NodeBase):
-    """ActivationNode is a node that represents an activation function that is imported from the library specified in lib_dependencies with the name specified in name"""
+    """A node representing an activation function resolved at runtime via ``get_activation(name)``."""
+
     def model_post_init(self, context: Any, /) -> None:
-        """Ensure that the code is specified for a ActivationNode"""
+        """Auto-add the ``get_activation`` local dependency after model initialization."""
         super().model_post_init(context)
         self.local_dependencies.add(("utils", "get_activation"))
 
     def get_var_code(self) -> str:
-        """
-        return the code that is used to create the activation function
-        """
+        """Return the runtime lookup expression for this activation."""
         return f"get_activation('{self.name}')"
 
 class OperatorNode(NodeBase):
-    """OperatorNode is a node that represents an operator that is imported from the library specified in lib_dependencies with the name specified in name"""
-    operator_symbol: str = Field(..., description="The symbol of the operator")
+    """A node representing a mathematical operator resolved at runtime via ``get_operator_function(symbol)``."""
+
+    operator_symbol: str = Field(
+        ...,
+        description="The mathematical symbol for the operator (e.g. '+', '-', '*', '/', '@', 'T')",
+    )
+
     def model_post_init(self, context: Any, /) -> None:
-        """Ensure that the code is specified for a ActivationNode"""
+        """Auto-add the ``get_operator_function`` local dependency after model initialization."""
         super().model_post_init(context)
         self.local_dependencies.add(("utils", "get_operator_function"))
 
     def get_var_code(self) -> str:
-        """
-        return the code that is used to create the operator function
-        """
+        """Return the runtime lookup expression for this operator."""
         return f"get_operator_function('{self.operator_symbol}')"
 
 def main():

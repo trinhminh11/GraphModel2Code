@@ -1,3 +1,12 @@
+"""
+Pre-defined neural network module registrations (MLP, Gated, GatedNet).
+
+Each module is a ModuleNode with an inline code template, dependency
+declarations, and kwargs metadata. The code templates use ``{class_name}``,
+``{description}``, and dependency placeholders that are filled in during
+code generation.
+"""
+
 from schemas import __REQUIRED__, ModuleNode
 
 from .state import register_module, get_module
@@ -131,7 +140,7 @@ register_module(
     ModuleNode(
         display_name="MLP",
         name="mlp",
-        description="Multi-Layer Perceptron",
+        description="Multi-Layer Perceptron (MLP). A fully-connected feed-forward network with configurable hidden layers and activation functions. Applies alternating Linear and activation layers",
         class_name="MLP",
         code=code_dict["mlp"],
         system_dependencies={
@@ -173,7 +182,7 @@ register_module(
     ModuleNode(
         display_name="Gated",
         name="gated",
-        description="Gated Operator (perform the operation `Y o gate(X)`) where gate is a function that takes X and returns a tensor of the same shape as Y",
+        description="Gated Operator. Computes Y o gate(X) where 'o' is a configurable binary operator and gate is a Linear+activation that maps X to the same shape as Y. Enables multiplicative gating patterns common in modern architectures",
         class_name="Gated",
         code=code_dict["gated"],
         system_dependencies={
@@ -221,7 +230,7 @@ register_module(
     ModuleNode(
         display_name="Gated Network",
         name="gated_net",
-        description="Gated Network (perform the operation `FC( FC(X) ) o gate(X)`)",
+        description="Gated Network. Computes down(up(X) o gate(X)) where up/down are Linear projections and gate is a Gated operator. Combines projection with multiplicative gating, used in architectures like LLaMA's feed-forward blocks",
         class_name="GatedNet",
         code=code_dict["gated_net"],
         system_dependencies={

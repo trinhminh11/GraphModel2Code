@@ -163,10 +163,8 @@ register_module(
     Subclasses must implement the `_forward` method to define the specific attention mechanism.
 """,
         code=code_dict["attn_base"],
-        system_dependencies={
+        dependencies={
             ("typing", "Optional"),
-        },
-        third_party_dependencies={
             ("torch", "nn"),
             ("torch", "Tensor"),
             ("torch", )
@@ -219,10 +217,8 @@ register_module(
         NotImplementedError: If causal attention is requested (causal=True).
         """,
         code=code_dict["sdp_attn"],
-        system_dependencies={
+        dependencies={
             ("math", ),
-        },
-        third_party_dependencies={
             ("torch", "nn"),
             ("torch", "Tensor"),
             ("torch", ),

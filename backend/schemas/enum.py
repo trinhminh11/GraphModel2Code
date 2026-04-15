@@ -18,4 +18,6 @@ class Tags(str, Enum):
 
     TORCH_MODULE = "torch_module"
 
+    CUSTOM = "custom"
+
     TEST = "test" # for internal testing purposes

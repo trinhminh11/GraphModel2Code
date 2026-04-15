@@ -26,7 +26,7 @@ class {identifier}(nn.Module):
     def forward(self, X: Tensor) -> Tensor:
         return X, X
 ''',
-        third_party_dependencies={
+        dependencies={
             ("torch", "nn"),
             ("torch", "Tensor"),
         },

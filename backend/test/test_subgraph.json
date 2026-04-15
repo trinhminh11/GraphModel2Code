@@ -1,0 +1,108 @@
+{
+    "name": "testing",
+    "class_name": "Testing",
+    "kwargs": {
+        "inp_dim": [
+            "int",
+            "__required__",
+            "The input dimension"
+        ],
+        "hidden_dim": [
+            "int",
+            "__required__",
+            "The hidden dimension"
+        ]
+    },
+    "nodes": {
+        "modules": {
+            "mlp": [
+                {
+                    "node_id": "mlp",
+                    "kwargs": {
+                        "input_dim": "#ref/inp_dim",
+                        "output_dim": "#ref/hidden_dim",
+                        "bias": false
+                    }
+                }
+            ]
+        },
+        "subgraphs": {
+            "test_subgraph": [
+                {
+                    "node_id": "block",
+                    "kwargs": {
+                        "inp_dim": "#ref/hidden_dim"
+                    }
+                }
+            ]
+        }
+    },
+    "inputs": {
+        "X": ["Tensor", "__required__", "The input tensor"]
+    },
+    "edges": [
+        {"prev_nodes": [{"node_id": "inputs", "input_gate": 0, "input_receive": "X"}], "node_id": "mlp", "output_gates": ["X"]},
+        {"prev_nodes": [{"node_id": "mlp", "input_gate": 0, "input_receive": "X"}], "node_id": "block", "output_gates": ["X"]},
+        {"prev_nodes": [{"node_id": "block", "input_gate": 0, "input_receive": "X"}], "node_id": "outputs", "output_gates": []}
+    ],
+    "dependencies": [["torch", "Tensor"], ["torch", "nn"]],
+    "subgraphs": {
+        "test_subgraph": {
+            "name": "test_subgraph",
+            "class_name": "TestSubgraph",
+            "kwargs": {
+                "inp_dim": [
+                    "int",
+                    "__required__",
+                    "The input dimension"
+                ]
+            },
+            "nodes": {
+                "modules": {
+                    "mlp": [
+                        {
+                            "node_id": "q_proj",
+                            "kwargs": {
+                                "input_dim": "#ref/inp_dim",
+                                "bias": false
+                            }
+                        },
+                        {
+                            "node_id": "k_proj",
+                            "kwargs": {
+                                "input_dim": "#ref/inp_dim",
+                                "bias": false
+                            }
+                        },
+                        {
+                            "node_id": "v_proj",
+                            "kwargs": {
+                                "input_dim": "#ref/inp_dim",
+                                "bias": false
+                            }
+                        }
+                    ],
+                    "sdp_attn": [
+                        {
+                            "node_id": "sdp_attn",
+                            "kwargs": {
+                                "dropout": 0.5
+                            }
+                        }
+                    ]
+                }
+            },
+            "inputs": {
+                "X": ["Tensor", "__required__", "The input tensor"]
+            },
+            "edges": [
+                {"prev_nodes": [{"node_id": "inputs", "input_gate": 0, "input_receive": "X"}], "node_id": "q_proj", "output_gates": ["Q"]},
+                {"prev_nodes": [{"node_id": "inputs", "input_gate": 0, "input_receive": "X"}], "node_id": "k_proj", "output_gates": ["K"]},
+                {"prev_nodes": [{"node_id": "inputs", "input_gate": 0, "input_receive": "X"}], "node_id": "v_proj", "output_gates": ["V"]},
+                {"prev_nodes": [{"node_id": "q_proj", "input_gate": 0, "input_receive": "Q"}, {"node_id": "k_proj", "input_gate": 0, "input_receive": "K"}, {"node_id": "v_proj", "input_gate": 0, "input_receive": "V"}], "node_id": "sdp_attn", "output_gates": ["attn_output", "attn_weights"]},
+                {"prev_nodes": [{"node_id": "sdp_attn", "input_gate": 0, "input_receive": null}], "node_id": "outputs", "output_gates": []}
+            ],
+            "dependencies": [["torch", "Tensor"], ["torch", "nn"]]
+        }
+    }
+}

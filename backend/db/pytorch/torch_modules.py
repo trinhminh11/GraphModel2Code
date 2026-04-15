@@ -21,7 +21,7 @@ register_torch_module(
         class_name="nn.Linear",
         display_name="Fully Connected/Linear/Dense Layer",
         description="Fully Connected/Linear/Dense Layer",
-        third_party_dependencies={
+        dependencies={
             ("torch", "nn"),
         },
         kwargs={
@@ -54,7 +54,7 @@ register_torch_module(
         class_name="nn.Conv2d",
         display_name="2D Convolution Layer",
         description="2D Convolution Layer",
-        third_party_dependencies={
+        dependencies={
             ("torch", "nn"),
         },
         kwargs={
@@ -120,7 +120,7 @@ register_torch_module(
         class_name="nn.LayerNorm",
         display_name="Layer Normalization",
         description="Layer Normalization",
-        third_party_dependencies={
+        dependencies={
             ("torch", "nn"),
         },
         kwargs={
@@ -159,7 +159,7 @@ register_torch_module(
         class_name="nn.Flatten",
         display_name="Flatten",
         description="Flatten the tensor",
-        third_party_dependencies={
+        dependencies={
             ("torch", "nn"),
         },
         kwargs={

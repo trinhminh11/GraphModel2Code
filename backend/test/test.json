@@ -67,17 +67,17 @@
         }
     },
     "inputs": {
-        "X": ["Tensor", "__required__"]
+        "X": ["Tensor", "__required__", "The input tensor"]
     },
     "edges": [
-        {"prev_nodes": [{"node_name": "inputs", "input_gate": "X", "input_receive": "input"}], "node_name": "lin", "output_gates": ["__default__"]},
-        {"prev_nodes": [{"node_name": "lin", "input_gate": "__default__", "input_receive": "X"}], "node_name": "mlp_first", "output_gates": ["__default__"]},
-        {"prev_nodes": [{"node_name": "mlp_first", "input_gate": "__default__", "input_receive": "X"}], "node_name": "dup", "output_gates": ["__default__0", "out_1"]},
-        {"prev_nodes": [{"node_name": "dup", "input_gate": "__default__0", "input_receive": "X"}], "node_name": "gated_net_1", "output_gates": ["__default__"]},
-        {"prev_nodes": [{"node_name": "gated_net_1", "input_gate": "__default__", "input_receive": "X"}, {"node_name": "dup", "input_gate": "__default__0", "input_receive": "Y"}], "node_name": "add", "output_gates": ["__default__"]},
-        {"prev_nodes": [{"node_name": "add", "input_gate": "__default__", "input_receive": "X"}], "node_name": "mlp_last", "output_gates": ["__default__"]},
-        {"prev_nodes": [{"node_name": "mlp_last", "input_gate": "__default__", "input_receive": "input"}], "node_name": "tanh", "output_gates": ["__default__"]},
-        {"prev_nodes": [{"node_name": "tanh", "input_gate": "__default__", "input_receive": null}, {"node_name": "dup", "input_gate": "out_1", "input_receive": null}], "node_name": "outputs", "output_gates": []}
+        {"prev_nodes": [{"node_id": "inputs", "input_gate": "X", "input_receive": "input"}], "node_id": "lin", "output_gates": ["__default__"]},
+        {"prev_nodes": [{"node_id": "lin", "input_gate": "__default__", "input_receive": "X"}], "node_id": "mlp_first", "output_gates": ["__default__"]},
+        {"prev_nodes": [{"node_id": "mlp_first", "input_gate": "__default__", "input_receive": "X"}], "node_id": "dup", "output_gates": ["__default__0", "out_1"]},
+        {"prev_nodes": [{"node_id": "dup", "input_gate": "__default__0", "input_receive": "X"}], "node_id": "gated_net_1", "output_gates": ["__default__"]},
+        {"prev_nodes": [{"node_id": "gated_net_1", "input_gate": "__default__", "input_receive": "X"}, {"node_id": "dup", "input_gate": "__default__0", "input_receive": "Y"}], "node_id": "add", "output_gates": ["__default__"]},
+        {"prev_nodes": [{"node_id": "add", "input_gate": "__default__", "input_receive": "X"}], "node_id": "mlp_last", "output_gates": ["__default__"]},
+        {"prev_nodes": [{"node_id": "mlp_last", "input_gate": "__default__", "input_receive": "input"}], "node_id": "tanh", "output_gates": ["__default__"]},
+        {"prev_nodes": [{"node_id": "tanh", "input_gate": "__default__", "input_receive": null}, {"node_id": "dup", "input_gate": "out_1", "input_receive": null}], "node_id": "outputs", "output_gates": []}
     ],
     "dependencies": [["torch", "Tensor"], ["torch", "nn"]]
 }

@@ -14,7 +14,7 @@ import ast
 from string import Formatter
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 
 from .base import __REQUIRED__
 from .enum import Tags
@@ -40,6 +40,7 @@ class NodeBase(BaseModel):
     Carries display metadata, dependency declarations, constructor kwargs,
     forward-pass kwargs, and the number of output tensors.
     """
+    model_config = ConfigDict(frozen=True)
 
     display_name: str = Field(
         ...,
@@ -54,17 +55,9 @@ class NodeBase(BaseModel):
         default=...,
         description="Brief explanation of the node's purpose, shown in the UI and embedded in generated docstrings",
     )
-    system_dependencies: set[tuple[str, ...]] = Field(
+    dependencies: set[tuple[str, ...]] = Field(
         default_factory=set,
-        description="Standard-library imports required by this node. Each tuple maps to an import statement, e.g. ('os',) -> import os, ('typing', 'Callable') -> from typing import Callable",
-    )
-    third_party_dependencies: set[tuple[str, ...]] = Field(
-        default_factory=set,
-        description="Third-party package imports required by this node. Each tuple maps to an import statement, e.g. ('torch', 'nn') -> from torch import nn",
-    )
-    local_dependencies: set[tuple[str, ...]] = Field(
-        default_factory=set,
-        description="Project-local imports required by this node. Each tuple maps to an import statement, e.g. ('utils', 'get_activation') -> from utils import get_activation",
+        description="Dependencies required by this node. Each tuple maps to an import statement, e.g. ('torch', 'nn') -> from torch import nn",
     )
     kwargs: dict[str, tuple[str, Any, str]] = Field(
         default_factory=dict,
@@ -126,15 +119,9 @@ class NodeBase(BaseModel):
 
     def get_dependencies(
         self,
-    ) -> dict[
-        Literal["system_lib", "third_party_lib", "local_lib"], set[tuple[str, ...]]
-    ]:
-        """Return a dict of copied dependency sets, keyed by 'system_lib', 'third_party_lib', 'local_lib'."""
-        return {
-            "system_lib": self.system_dependencies.copy(),
-            "third_party_lib": self.third_party_dependencies.copy(),
-            "local_lib": self.local_dependencies.copy(),
-        }
+    ) -> set[tuple[str, ...]]:
+        """Return a set of copied dependencies."""
+        return self.dependencies.copy()
 
     def get_assign_code(self) -> str:
         raise NotImplementedError("get_assign_code is not implemented for NodeBase")
@@ -258,23 +245,16 @@ class CodeNode(NodeBase):
 
         return code_str
 
-    def get_dependencies(self, code_root: tuple[str, ...] = None):
+    def get_dependencies(self, *code_root: str) -> dict[Literal["dependencies", "code_dependencies"], set[tuple[str, ...]]]:
         """Merge this node's dependencies with all transitive ``node_dependencies``."""
-        dependencies = super().get_dependencies()
-        dependencies["code_dependencies"] = set()
-        code_root = code_root if code_root is not None else tuple()
+        dependencies: dict[str, set[tuple[str, ...]]] = {
+            "dependencies": super().get_dependencies(),
+            "code_dependencies": set(),
+        }
 
-        for node_name, node in self.node_dependencies.items():
-            dependencies["code_dependencies"] = set(
-                [
-                    (*code_root, *node.code_file, node.identifier),
-                ]
-            )
-            # current_node_dependencies = node.get_dependencies()
-            # dependencies["code_dependencies"].update(current_node_dependencies["code_dependencies"])
-            # dependencies["system_lib"].update(current_node_dependencies["system_lib"])
-            # dependencies["third_party_lib"].update(current_node_dependencies["third_party_lib"])
-            # dependencies["local_lib"].update(current_node_dependencies["local_lib"])
+        for _, node in self.node_dependencies.items():
+            dependencies["code_dependencies"].add((*code_root, node.identifier))
+
         return dependencies
 
 
@@ -349,7 +329,7 @@ class ActivationNode(NodeBase):
     def model_post_init(self, context: Any, /) -> None:
         """Auto-add the ``get_activation`` local dependency after model initialization."""
         super().model_post_init(context)
-        self.local_dependencies.add(("utils", "get_activation"))
+        self.dependencies.add(("utils", "get_activation"))
 
     def get_assign_code(self) -> str:
         """Return the runtime lookup expression for this activation."""
@@ -375,7 +355,7 @@ class OperatorNode(NodeBase):
     def model_post_init(self, context: Any, /) -> None:
         """Auto-add the ``get_operator_function`` local dependency after model initialization."""
         super().model_post_init(context)
-        self.local_dependencies.add(("utils", "get_operator_function"))
+        self.dependencies.add(("utils", "get_operator_function"))
 
     def get_assign_code(self) -> str:
         """Return the runtime lookup expression for this operator."""

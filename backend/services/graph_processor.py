@@ -1,54 +1,54 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Callable, Iterable, Literal, TypeAlias
 
-from db.pytorch import get_node, utils_code
-from schemas import __ANY__, __REQUIRED__, Graph, ModuleNode
+from db.pytorch import get_node as get_node_db, utils_code
+from schemas import __ANY__, __REQUIRED__, Graph, ModuleNode, Tags, LibNode, ActivationNode, OperatorNode
 from utils.import_utils import get_dependencies_str
 
 from .log import logger
 
-raise_flow_check = True
+raise_flow_check = False
 
+
+DBNodeTypes: TypeAlias = Literal["activations", "operators", "modules", "torch_modules"]
+NodeType: TypeAlias = Literal["inputs", "outputs", "modules", "activations", "operators", "torch_modules", "subgraphs"]
+
+GetNodeFuncType: TypeAlias = Callable[[NodeType, str], ModuleNode | LibNode | ActivationNode | OperatorNode]
 
 class FileNode:
-    def __init__(self):
+    def __init__(self, file_tree: str = None):
         self.classes: list[ModuleNode] = []
 
-        self.system_dependencies: set[tuple[str, ...]] = set()
-        self.third_party_dependencies: set[tuple[str, ...]] = set()
-        self.local_dependencies: set[tuple[str, ...]] = set()
-
+        self.dependencies: set[tuple[str, ...]] = set()
         self.code_str = ""
+
+        self._file_str: str = file_tree
 
     def add_code_class(self, class_node: ModuleNode):
         self.code_str = class_node.get_creation_code() + "\n" + self.code_str
 
+    def set_permanent_file_str(self, file_str: str):
+        if self._file_str is not None:
+            raise ValueError("the file str is already set")
+        self._file_str = file_str
+
     @property
     def file_str(self) -> str:
-        return f"""# System libraries
-{get_dependencies_str(self.system_dependencies)}
-# Third party libraries
-{get_dependencies_str(self.third_party_dependencies)}
-# Local imports
-{get_dependencies_str(self.local_dependencies)}
+        if self._file_str is not None:
+            return self._file_str
+        return f"""# Imports
+{get_dependencies_str(self.dependencies)}
 
 # Code
 {self.code_str}
 """
 
-    def add_system_dependencies(self, dependencies: set[str]):
-        self.system_dependencies.update(dependencies)
-
-    def add_third_party_dependencies(self, dependencies: set[str]):
-        self.third_party_dependencies.update(dependencies)
-
-    def add_local_dependencies(self, dependencies: set[str]):
-        self.local_dependencies.update(dependencies)
+    def add_dependencies(self, dependencies: set[str]):
+        self.dependencies.update(dependencies)
 
 
 type FileTree = dict[str, FileNode | FileTree]
-type FileTreeDict = dict[str, FileTree]
 
 
 class GraphNode:
@@ -61,25 +61,21 @@ class GraphNode:
 
     def __init__(
         self,
-        node_type: Literal[
-            "inputs", "outputs", "modules", "activations", "operators", "torch_modules"
-        ],
+        node_type: NodeType,
         node_id: str,
         node_name: str,
     ):
-        self.node_type: Literal[
-            "inputs", "outputs", "modules", "activations", "operators", "torch_modules"
-        ] = node_type
+        self.node_type: NodeType = node_type
         self.node_id = node_id
         self.node_name = node_name
         self.level: int = -1
-        self.prev: list[tuple[GraphNode, str, str]] = []
+        self.prev: list[tuple[GraphNode, int, str]] = []
         self.output_gates: tuple[str, ...] = None
 
     def add_prev(
         self,
         prev_node: "GraphNode",
-        input_gate: str,
+        input_gate: int,
         input_receive: str,
     ):
         """Register *prev_node* as a predecessor, recording which gate feeds which input slot."""
@@ -101,7 +97,7 @@ class ExecuteGraph:
     via backward BFS so that nodes can be visited in correct execution order.
     """
 
-    def __init__(self, data: Graph):
+    def __init__(self, data: Graph, get_node_func: GetNodeFuncType):
         """Parse *data* edges into ``GraphNode`` objects and compute levels."""
         self.nodes: dict[str, GraphNode] = {}
 
@@ -117,20 +113,20 @@ class ExecuteGraph:
         self.nodes["outputs"] = GraphNode("outputs", "outputs", "outputs")
 
         for edge in data.edges:
-            current_node = self.nodes[edge.node_name]
+            current_node = self.nodes[edge.node_id]
 
             for prev_node in edge.prev_nodes:
                 current_node.add_prev(
-                    self.nodes[prev_node.node_name],
+                    self.nodes[prev_node.node_id],
                     prev_node.input_gate,
                     prev_node.input_receive,
                 )
 
             current_node.update_output_gate(edge.output_gates)
 
-        self.check_and_calc_level()
+        self.check_and_calc_level(get_node_func)
 
-    def check_and_calc_level(self):
+    def check_and_calc_level(self, get_node_func: GetNodeFuncType):
         """Validate the graph, assign topological levels, and drop unreachable nodes.
 
         Walks backward from ``outputs`` with DFS. For each node, checks that
@@ -147,15 +143,14 @@ class ExecuteGraph:
         def _dfs(node: GraphNode, current_level: int):
             # Real graph nodes must have predecessor count within [n_required_inputs, n_inputs].
             if node.node_type not in ("inputs", "outputs"):
-                n_required_inputs = get_node(
-                    node.node_type, node.node_name
-                ).n_required_inputs
-                n_inputs = get_node(node.node_type, node.node_name).n_inputs
+                current_node = get_node_func(node.node_type, node.node_name)
+                n_required_inputs = current_node.n_required_inputs
+                n_inputs = current_node.n_inputs
                 if len(node.prev) < n_required_inputs or len(node.prev) > n_inputs:
                     raise ValueError(
                         f"Node {node.node_id} has {len(node.prev)} inputs but needs to be between {n_required_inputs} (required) and {n_inputs} (total)"
                     )
-                n_outputs = get_node(node.node_type, node.node_name).n_outputs
+                n_outputs = current_node.n_outputs
                 if len(node.output_gates) != n_outputs:
                     raise ValueError(
                         f"Node {node.node_id} has {len(node.output_gates)} outputs but needs to be equal to {n_outputs}"
@@ -178,15 +173,10 @@ class ExecuteGraph:
 
             for prev_node, input_gate, _ in node.prev:
                 # Each edge must read a tensor from a gate that the predecessor actually exposes.
-                if input_gate not in prev_node.output_gates:
-                    if raise_flow_check:
-                        raise ValueError(
-                            f"Input gate {input_gate} does not match output gate {prev_node.output_gates}"
-                        )
-                    else:
-                        logger.warning(
-                            f"Input gate {input_gate} does not match output gate {prev_node.output_gates}"
-                        )
+                if input_gate < 0 or input_gate >= len(prev_node.output_gates):
+                    raise ValueError(
+                        f"Input gate {input_gate} does not exist on node {prev_node.node_id}"
+                    )
 
                 _dfs(prev_node, current_level + 1)
 
@@ -232,20 +222,80 @@ class CodeGenerator:
     building the constructor signature, import statements, ``__init__`` body,
     ``forward`` signature and body, and auxiliary module files.
     """
+    def __init__(self):
+        self.subgraphs: dict[str, ModuleNode] = {}
 
-    def generate(self, data: Graph) -> dict[str, FileTreeDict]:
+    def get_node(self, node_type: NodeType, node_name: str) -> ModuleNode | LibNode | ActivationNode | OperatorNode:
+        if node_type == "subgraphs":
+            return self.subgraphs[node_name]
+        else:
+            return get_node_db(node_type, node_name)
+
+    def generate_subgraph(self, data: Graph):
+        graph = ExecuteGraph(data, self.get_node)
+
+        kwargs_str = self._build_init_kwargs(data.kwargs)
+        dependencies = self._build_dependencies(data)
+        init_body = self._build_init_body(data)
+        forward_sig = self._build_forward_signature(data)
+        forward_body = self._build_forward_body(graph)
+
+        dependencies.update(self._build_modules_import(data.nodes.modules.keys()))
+
+        main_code = f'''class {{identifier}}(nn.Module):
+    """
+    {{description}}
+    """
+    def __init__(self, {kwargs_str}):
+        super().__init__()
+        {init_body}
+    def forward(self, {forward_sig}):
+{forward_body}'''
+
+        outputs: list[tuple[str, str]] = []
+
+        for prev_node, input_gate, _ in graph.nodes["outputs"].prev:
+            outputs.append(self.get_node(prev_node.node_type, prev_node.node_name).outputs[input_gate])
+
+
+        self.subgraphs[data.name] = ModuleNode(
+            display_name=data.name,
+            name=data.name,
+            class_name=data.class_name,
+            description=data.description,
+            code=main_code,
+            dependencies=dependencies,
+            kwargs=data.kwargs,
+            forward_kwargs=data.inputs,
+            outputs=outputs,
+            code_file=("subgraphs", ),
+            tags={Tags.CUSTOM, },
+        )
+
+    def generate(self, data: Graph) -> FileTree:
         """Orchestrate full code generation and return a dict of filename -> source code.
 
         Returns a dict with keys ``'main.py'``, ``'utils.py'``,
         ``'modules.py'``.
         """
-        kwargs_str = self._build_init_kwargs(data)
-        dependencies_str = self._build_dependencies(data)
+        self._build_subgraphs(data.subgraphs)
+
+        graph = ExecuteGraph(data, self.get_node)
+
+
+        kwargs_str = self._build_init_kwargs(data.kwargs)
+        dependencies = self._build_dependencies(data)
         init_body = self._build_init_body(data)
         forward_sig = self._build_forward_signature(data)
-        forward_body = self._build_forward_body(data)
+        forward_body = self._build_forward_body(graph)
 
-        main_code = f"""{dependencies_str}
+        dependencies.update(self._build_modules_import(data.nodes.modules.keys()))
+
+        for subgraph_name, subgraph_node in self.subgraphs.items():
+            dependencies.add(("subgraphs", subgraph_node.identifier))
+
+        main_code = f"""
+{get_dependencies_str(dependencies)}
 
 class {data.class_name}(nn.Module):
     def __init__(self, {kwargs_str}):
@@ -254,16 +304,18 @@ class {data.class_name}(nn.Module):
     def forward(self, {forward_sig}):
 {forward_body}"""
 
-        modules_tree, modules_import = self._build_modules_folder(data)
-        main_code = modules_import + "\n" + main_code
+        modules_tree = self._build_modules_folder(data.get_module_nodes())
+
 
         return {
-            "main": main_code,
+            "main": FileNode(main_code),
             "modules": modules_tree,
-            "utils": utils_code,
+            "utils": FileNode(utils_code),
+            "subgraphs": self._build_subgraphs_file(),
         }
 
-    def _build_init_kwargs(self, data: Graph) -> str:
+
+    def _build_init_kwargs(self, kwargs: dict[str, tuple[str, Any, str]]) -> str:
         """Build the ``__init__`` parameter signature string from ``data.kwargs``.
 
         Separates required arguments (no default) from optional ones and
@@ -273,7 +325,7 @@ class {data.class_name}(nn.Module):
         required_kwargs_lst = []
         optional_kwargs_lst = []
 
-        for name, (type_, default) in data.kwargs.items():
+        for name, (type_, default, _) in kwargs.items():
             if type_ == __ANY__:
                 item = f"{name}"
             else:
@@ -286,21 +338,22 @@ class {data.class_name}(nn.Module):
 
         return ", ".join(required_kwargs_lst + optional_kwargs_lst)
 
-    def _build_dependencies(self, data: Graph) -> str:
+    def _build_dependencies(self, data: Graph) -> set[tuple[str, ...]]:
         """Build the top-level import block for the generated main module.
 
         Includes third-party imports from ``data.dependencies`` plus
         conditional ``utils`` imports when the graph uses activations
         or operators.
         """
-        dependencies_str = get_dependencies_str(data.dependencies)
+
+        dependencies = data.dependencies.copy()
 
         if len(data.nodes.activations) > 0:
-            dependencies_str += "\nfrom utils import get_activation"
+            dependencies.add(("utils", "get_activation"))
         if len(data.nodes.operators) > 0:
-            dependencies_str += "\nfrom utils import get_operator_function"
+            dependencies.add(("utils", "get_operator_function"))
 
-        return dependencies_str
+        return dependencies
 
     def _build_init_body(self, data: Graph) -> str:
         """Build the submodule instantiation lines inside ``__init__``.
@@ -313,7 +366,7 @@ class {data.class_name}(nn.Module):
             body += f"\n        # {node_type}\n"
             for node_name, nodes in nodes_base.items():
                 for node in nodes:
-                    body += f"        self.{node.node_id} = {get_node(node_type, node_name).get_assign_code(**node.kwargs)}\n"
+                    body += f"        self.{node.node_id} = {self.get_node(node_type, node_name).get_assign_code(**node.kwargs)}\n"
         body += "\n"
         return body
 
@@ -325,7 +378,7 @@ class {data.class_name}(nn.Module):
         """
         input_kwargs = []
 
-        for name, (type_, default) in data.inputs.items():
+        for name, (type_, default, _) in data.inputs.items():
             if name.startswith("__default__"):
                 name = "input" + name[len("__default__") :]
 
@@ -341,7 +394,7 @@ class {data.class_name}(nn.Module):
 
         return ", ".join(input_kwargs)
 
-    def _build_forward_body(self, data: Graph) -> str:
+    def _build_forward_body(self, graph: ExecuteGraph) -> str:
         """Build the ``forward()`` method body by traversing nodes in execution order.
 
         Uses ``ExecuteGraph`` to determine the correct ordering, then
@@ -349,18 +402,17 @@ class {data.class_name}(nn.Module):
         for the outputs node.
         """
         body = ""
-        graph = ExecuteGraph(data)
 
         for node in graph.return_by_level():
             if node.node_name == "outputs":
-                return_parts = [prev_tuple[1] for prev_tuple in node.prev]
+                return_parts = [prev_node.output_gates[input_gate] for prev_node, input_gate, input_receive in node.prev]
                 return_str = ", ".join(return_parts)
                 body += f"        return {return_str}\n"
                 break
 
             input_parts = []
-            for _, input_gate, input_receive in node.prev:
-                input_parts.append(f"{input_receive}={input_gate}")
+            for prev_node, input_gate, input_receive in node.prev:
+                input_parts.append(f"{input_receive}={prev_node.output_gates[input_gate]}")
             input_str = ", ".join(input_parts)
 
             output_gates = node.output_gates
@@ -376,7 +428,7 @@ class {data.class_name}(nn.Module):
 
         return body
 
-    def _build_modules_folder(self, data: Graph) -> tuple[FileTreeDict, str]:
+    def _build_modules_folder(self, node_names: Iterable[str]) -> tuple[FileTree, str]:
         """Materialize custom module sources under ``<root>/modules/`` and wire ``__init__.py``.
 
         Walks every registered ``modules`` node from *data*, builds a nested tree from
@@ -395,36 +447,22 @@ class {data.class_name}(nn.Module):
               and ``__all__`` listing every generated class name.
 
         Args:
-            data: Graph definition whose ``nodes.modules`` keys drive which registry
+            node_names: The names of the nodes to build the file tree for
                 ``ModuleNode`` templates are expanded.
-            root: Output directory; the ``modules`` package is created at ``root/modules``.
-
-        Returns:
-            A single import line to prepend to generated ``main.py``, e.g.
-            ``from modules import Foo, Bar``, or an empty string if no module classes
-            are referenced from the main graph.
         """
         file_tree: FileTree = {}
-        file_tree_dict: FileTreeDict = {}
-        main_depends_code: set[str] = set()
 
         __init__import_code: set[tuple[str, ...]] = set()
 
-        def _recursive_file_tree(node: ModuleNode, main_used=True):
+        def _recursive_file_tree(node: ModuleNode):
             current_file_tree: FileTree = file_tree
-            current_file_tree_dict: FileTreeDict = file_tree_dict
             current_node_dependency = (*node.code_file, node.identifier)
             __init__import_code.add(current_node_dependency)
-
-            if main_used:
-                main_depends_code.add(node.class_name)
 
             for folder_name in node.code_file[:-1]:
                 if folder_name not in current_file_tree:
                     current_file_tree[folder_name] = {}
-                    file_tree_dict[folder_name] = {}
                 current_file_tree = current_file_tree[folder_name]
-                current_file_tree_dict = current_file_tree_dict[folder_name]
 
             file_name = node.code_file[-1].strip()
 
@@ -436,32 +474,26 @@ class {data.class_name}(nn.Module):
                         f"cannot create file {file_name} because it already exists as a folder"
                     )
 
-            dependencies = node.get_dependencies(code_root=("modules",))
+            dependencies = node.get_dependencies("modules")
 
             current_file_tree[file_name].add_code_class(node)
-            current_file_tree[file_name].add_system_dependencies(
-                dependencies["system_lib"]
-            )
-            current_file_tree[file_name].add_third_party_dependencies(
-                dependencies["third_party_lib"]
-            )
-            current_file_tree[file_name].add_local_dependencies(
-                dependencies["local_lib"]
-            )
+            current_file_tree[file_name].add_dependencies(dependencies["dependencies"])
 
 
-            current_file_tree[file_name].add_local_dependencies(
-                (code_dependency for code_dependency in dependencies["code_dependencies"] if code_dependency[1:-1] != node.code_file)
+            current_file_tree[file_name].add_dependencies(
+                (
+                    code_dependency
+                    for code_dependency in dependencies["code_dependencies"]
+                    if code_dependency[1:-1] != node.code_file
+                )
             )
 
             for _, node_module in node.node_dependencies.items():
-                _recursive_file_tree(node_module, main_used=False)
+                _recursive_file_tree(node_module)
 
-            current_file_tree_dict[file_name] = current_file_tree[file_name].file_str
-
-        for node_name in data.nodes.modules.keys():
-            node = get_node("modules", node_name)
-            _recursive_file_tree(node, main_used=True)
+        for node_name in node_names:
+            node = self.get_node("modules", node_name)
+            _recursive_file_tree(node)
 
         __init__file_str = f"""{get_dependencies_str(__init__import_code, add_dot=True)}
 __all__ = [
@@ -469,13 +501,32 @@ __all__ = [
 ]
         """
 
-        file_tree_dict["__init__"] = __init__file_str
+        file_tree["__init__"] = FileNode()
+        file_tree["__init__"].set_permanent_file_str(__init__file_str)
 
-        import_line_for_main = ""
-        if len(main_depends_code) > 0:
-            import_from_code = "from modules import "
-            for node_class_name in main_depends_code:
-                import_from_code += f"{node_class_name}, "
-            import_line_for_main = import_from_code[:-2]
+        # import_line_for_main = ""
+        # if len(main_depends_code) > 0:
+        #     import_from_code = "from modules import "
+        #     for node_class_name in main_depends_code:
+        #         import_from_code += f"{node_class_name}, "
+        #     import_line_for_main = import_from_code[:-2]
 
-        return file_tree_dict, import_line_for_main
+        return file_tree
+
+    def _build_subgraphs_file(self):
+        file = FileNode()
+
+        for subgraph_name, subgraph_node in self.subgraphs.items():
+            file.add_code_class(subgraph_node)
+            subgraph_dependencies = subgraph_node.get_dependencies()
+            file.add_dependencies(subgraph_dependencies["dependencies"])
+            file.add_dependencies(subgraph_dependencies["code_dependencies"])
+
+        return file
+
+    def _build_modules_import(self, node_names: Iterable[str]) -> set[tuple[str, ...]]:
+        return {("modules", self.get_node("modules", module_name).identifier) for module_name in node_names}
+
+    def _build_subgraphs(self, subgraphs: dict[str, Graph]) -> FileNode:
+        for subgraph_name, subgraph_data in subgraphs.items():
+            self.generate_subgraph(subgraph_data)

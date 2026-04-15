@@ -143,14 +143,10 @@ register_module(
         description="Multi-Layer Perceptron (MLP). A fully-connected feed-forward network with configurable hidden layers and activation functions. Applies alternating Linear and activation layers",
         class_name="MLP",
         code=code_dict["mlp"],
-        system_dependencies={
+        dependencies={
             ("typing", "Callable"),
-        },
-        third_party_dependencies={
             ("torch", "nn"),
             ("torch", "Tensor"),
-        },
-        local_dependencies={
             ("utils", "get_activation"),
         },
         kwargs={
@@ -187,14 +183,10 @@ register_module(
         description="Gated Operator. Computes Y o gate(X) where 'o' is a configurable binary operator and gate is a Linear+activation that maps X to the same shape as Y. Enables multiplicative gating patterns common in modern architectures",
         class_name="Gated",
         code=code_dict["gated"],
-        system_dependencies={
+        dependencies={
             ("typing", "Callable"),
-        },
-        third_party_dependencies={
             ("torch", "nn"),
             ("torch", "Tensor"),
-        },
-        local_dependencies={
             ("utils", "get_activation"),
             ("utils", "get_operator_function"),
         },
@@ -237,12 +229,10 @@ register_module(
         description="Gated Network. Computes down(up(X) o gate(X)) where up/down are Linear projections and gate is a Gated operator. Combines projection with multiplicative gating, used in architectures like LLaMA's feed-forward blocks",
         class_name="GatedNet",
         code=code_dict["gated_net"],
-        system_dependencies={
+        dependencies={
             ("typing", "Callable"),
-        },
-        third_party_dependencies={
             ("torch", "nn"),
-            ("torch", "Tensor"),
+            ("torch", "Tensor")
         },
         node_dependencies={"gated": get_module("gated")},
         kwargs={

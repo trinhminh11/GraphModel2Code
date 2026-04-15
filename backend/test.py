@@ -11,7 +11,7 @@ Example graph topologies are illustrated in the ASCII diagrams below.
 
 from services import CodeGenerator
 from schemas import Graph
-from services.graph_processor import FileTreeDict
+from services.graph_processor import FileTree, FileNode
 from pathlib import Path
 
 raise_flow_check = True
@@ -97,12 +97,12 @@ raise_flow_check = True
                 ----------
 """
 
-def recursive_write_file(file_tree: FileTreeDict, path: Path):
+def recursive_write_file(file_tree: FileTree, path: Path):
     for file_or_folder in file_tree.keys():
-        if isinstance(file_tree[file_or_folder], str):
+        if isinstance(file_tree[file_or_folder], FileNode):
             path.mkdir(parents=True, exist_ok=True)
             with open((path / file_or_folder).with_suffix(".py"), "w") as f:
-                f.write(file_tree[file_or_folder])
+                f.write(file_tree[file_or_folder].file_str)
         else:
             recursive_write_file(file_tree[file_or_folder], path / file_or_folder)
 
@@ -114,13 +114,15 @@ def main():
 
     os.makedirs("temp", exist_ok=True)
 
-    with open("test/test_attn.json", "r") as f:
+    with open("test/test_subgraph.json", "r") as f:
         data = json.load(f)
 
     generator = CodeGenerator()
     file_tree = generator.generate(Graph(**data))
 
     recursive_write_file(file_tree, Path("temp"))
+
+
 
 if __name__ == "__main__":
     main()

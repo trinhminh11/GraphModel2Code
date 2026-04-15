@@ -11,6 +11,7 @@ via `schemas.graph` and are not re-exported here.
 from .base import __ANY__, __REQUIRED__
 from .graph import Graph
 from .node import ActivationNode, LibNode, ModuleNode, NodeBase, OperatorNode
+from .enum import Tags
 
 __all__ = [
     "NodeBase",
@@ -19,6 +20,7 @@ __all__ = [
     "ModuleNode",
     "LibNode",
     "Graph",
+    "Tags",
     "__REQUIRED__",
     "__ANY__",
 ]

@@ -1,11 +1,12 @@
 # This file is used to register all the torch.nn modules
 
-from schemas import __REQUIRED__, LibNode
+from schemas import __REQUIRED__, LibNode, Tags
 
 torch_modules_dict: dict[str, LibNode] = {}
 
 
 def register_torch_module(lib_node: LibNode) -> None:
+    lib_node.tags.add(Tags.TORCH_MODULE)
     torch_modules_dict[lib_node.name] = lib_node
 
 def get_torch_module(name: str) -> LibNode:
@@ -43,6 +44,7 @@ register_torch_module(
         forward_kwargs={
             "input": ("Tensor", __REQUIRED__, "The input tensor"),
         },
+        tags={Tags.COMMON, }
     )
 )
 
@@ -105,6 +107,7 @@ register_torch_module(
         forward_kwargs={
             "input": ("Tensor", __REQUIRED__, "The input tensor"),
         },
+        tags={Tags.COMMON, Tags.CNN, Tags.CV}
     )
 )
 
@@ -145,6 +148,7 @@ register_torch_module(
         forward_kwargs={
             "input": ("Tensor", __REQUIRED__, "The input tensor"),
         },
+        tags={Tags.COMMON, Tags.NORM}
     )
 )
 
@@ -173,5 +177,6 @@ register_torch_module(
         forward_kwargs={
             "input": ("Tensor", __REQUIRED__, "The input tensor"),
         },
+        tags={Tags.COMMON, }
     )
 )

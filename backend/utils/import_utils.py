@@ -36,8 +36,8 @@ class DependencyTree:
 
     def check_dependency(self, dependency: str) -> bool:
         name = dependency.strip()
-        if "as" in name:
-            name, alias = name.split("as")
+        if " as " in name:
+            name, alias = name.split(" as ")
             name = name.strip()
             alias = alias.strip()
         else:

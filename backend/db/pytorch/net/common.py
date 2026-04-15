@@ -7,7 +7,7 @@ declarations, and kwargs metadata. The code templates use ``{class_name}``,
 code generation.
 """
 
-from schemas import __REQUIRED__, ModuleNode
+from schemas import __REQUIRED__, ModuleNode, Tags
 
 from .state import register_module, get_module
 
@@ -176,6 +176,7 @@ register_module(
             "X": ("Tensor", __REQUIRED__, "The input tensor"),
         },
         code_file=("common", ),
+        tags={Tags.COMMON, }
     )
 )
 
@@ -225,6 +226,7 @@ register_module(
             "Y": ("Tensor", __REQUIRED__, "The output tensor"),
         },
         code_file=("common", ),
+        tags={Tags.COMMON, }
     )
 )
 
@@ -271,5 +273,6 @@ register_module(
             "X": ("Tensor", __REQUIRED__, "The input tensor"),
         },
         code_file=("common", ),
+        tags={Tags.COMMON, }
     )
 )

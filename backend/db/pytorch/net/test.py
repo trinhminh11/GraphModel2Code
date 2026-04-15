@@ -6,7 +6,7 @@ module/activation/operator categories. They are registered as ModuleNode
 instances and looked up by name via ``get_custom(name)``.
 """
 
-from schemas import ModuleNode, __REQUIRED__
+from schemas import ModuleNode, __REQUIRED__, Tags
 from .state import register_module
 
 
@@ -31,7 +31,8 @@ class {identifier}(nn.Module):
             ("torch", "Tensor"),
         },
         forward_kwargs={"X": ("Tensor", __REQUIRED__, "The input tensor to duplicate")},
-        n_outputs=2,
+        outputs=(("Tensor", "The first duplicated tensor"), ("Tensor", "The second duplicated tensor")),
         code_file=("test", ),
+        tags={Tags.TEST, }
     )
 )

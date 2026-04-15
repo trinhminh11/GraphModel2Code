@@ -10,11 +10,14 @@ Defines the base schema (NodeBase) and its specializations:
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, field_validator, model_validator
 import ast
-from typing import Any
-from .base import __REQUIRED__
 from string import Formatter
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from .base import __REQUIRED__
+from .enum import Tags
 
 
 def validate_literal(type_: str, default: Any):
@@ -29,6 +32,7 @@ def validate_literal(type_: str, default: Any):
         if default not in literal_list:
             return False
     return True
+
 
 class NodeBase(BaseModel):
     """Base schema shared by every node type in the system.
@@ -82,11 +86,20 @@ class NodeBase(BaseModel):
             "and description explains the argument"
         ),
     )
-    n_outputs: int = Field(
-        default=1,
-        description="Number of output tensors this node produces (>1 for fan-out nodes like Dup)",
+
+    outputs: tuple[tuple[str, str], ...] = Field(
+        default_factory=lambda: (("Tensor", "The output tensor"),),
+        description="Outputs of this node. Each value is a 2-tuple (type_str, description): type_str is the Python type as a string, and description explains the output. Default is (Tensor, The output tensor), you have to change this if you have multiple outputs or different types of outputs",
     )
 
+    tags: set[Tags] = Field(
+        default_factory=set,
+        description="tags of the node. This is used to group nodes together for UI display purposes",
+    )
+
+    @property
+    def n_outputs(self) -> int:
+        return len(self.outputs)
 
     @field_validator("kwargs")
     @classmethod
@@ -94,18 +107,28 @@ class NodeBase(BaseModel):
         """Ensure that every kwarg whose type is ``Literal[...]`` has a default that belongs to that literal set."""
         for key, (type_, default, _) in kwargs.items():
             if not validate_literal(type_, default):
-                raise ValueError(f"The default value {default} is not in the literal list {type_} for the key {key}")
+                raise ValueError(
+                    f"The default value {default} is not in the literal list {type_} for the key {key}"
+                )
         return kwargs
 
     @property
     def n_required_inputs(self) -> int:
-        return sum(1 for _, (_, default, _) in self.forward_kwargs.items() if default == __REQUIRED__)
+        return sum(
+            1
+            for _, (_, default, _) in self.forward_kwargs.items()
+            if default == __REQUIRED__
+        )
 
     @property
     def n_inputs(self) -> int:
         return len(self.forward_kwargs)
 
-    def get_dependencies(self):
+    def get_dependencies(
+        self,
+    ) -> dict[
+        Literal["system_lib", "third_party_lib", "local_lib"], set[tuple[str, ...]]
+    ]:
         """Return a dict of copied dependency sets, keyed by 'system_lib', 'third_party_lib', 'local_lib'."""
         return {
             "system_lib": self.system_dependencies.copy(),
@@ -119,10 +142,16 @@ class NodeBase(BaseModel):
     def get_creation_code(self) -> str:
         raise NotImplementedError("get_creation_code is not implemented for NodeBase")
 
+
 class ClassNode(NodeBase):
     class_name: str = Field(
         ...,
         description="Fully-qualified or short name of the library class (e.g. 'nn.Flatten')",
+    )
+
+    is_abstract: bool = Field(
+        default=False,
+        description="Whether this node is an abstract class (i.e. not instantiable) and should not be shown in the UI selection list",
     )
 
     def get_assign_code(self, include_default_value: bool = False, **kwargs) -> str:
@@ -137,11 +166,15 @@ class ClassNode(NodeBase):
         for key, (type_, default, _) in self.kwargs.items():
             if key in kwargs:
                 if not validate_literal(type_, kwargs[key]):
-                    raise ValueError(f"The value {kwargs[key]} is not in the literal list {type_} for the key {key} of the node {self.class_name}")
+                    raise ValueError(
+                        f"The value {kwargs[key]} is not in the literal list {type_} for the key {key} of the node {self.class_name}"
+                    )
 
                 var_key[key] = (type_, kwargs[key])
             elif default == __REQUIRED__:
-                raise ValueError(f"The argument {key} is required for the node {self.class_name}")
+                raise ValueError(
+                    f"The argument {key} is required for the node {self.class_name}"
+                )
             elif include_default_value:
                 var_key[key] = (type_, default)
 
@@ -149,20 +182,22 @@ class ClassNode(NodeBase):
 
         for key, (type_, value) in var_key.items():
             if isinstance(value, str) and value.startswith("#ref/"):
-                ref_key = value[len("#ref/"):]
+                ref_key = value[len("#ref/") :]
                 kwargs_lst.append(f"{key}={ref_key}")
             else:
                 kwargs_lst.append(f"{key}={value!r}")
 
-        return f"{self.class_name}({", ".join(kwargs_lst)})"
+        return f"{self.class_name}({', '.join(kwargs_lst)})"
+
 
 class FunctionNode(NodeBase):
-    """ A node representing a function that can use right away without defining a variable for it
-    """
+    """A node representing a function that can use right away without defining a variable for it"""
+
     function_name: str = Field(
         ...,
         description="The name of the function to use",
-    ) 
+    )
+
 
 class CodeNode(NodeBase):
     identifier: str = Field(
@@ -194,9 +229,13 @@ class CodeNode(NodeBase):
             elif field == "description":
                 description_check = True
         if not identifier_check:
-            raise ValueError(f"The code {code} is not a valid code template, it must contain the identifier field")
+            raise ValueError(
+                f"The code {code} is not a valid code template, it must contain the identifier field"
+            )
         if not description_check:
-            raise ValueError(f"The code {code} is not a valid code template, it must contain the description field")
+            raise ValueError(
+                f"The code {code} is not a valid code template, it must contain the description field"
+            )
         return code
 
     def get_creation_code(self) -> str:
@@ -226,7 +265,11 @@ class CodeNode(NodeBase):
         code_root = code_root if code_root is not None else tuple()
 
         for node_name, node in self.node_dependencies.items():
-            dependencies["code_dependencies"] = set([(*code_root, *node.code_file, node.identifier), ])
+            dependencies["code_dependencies"] = set(
+                [
+                    (*code_root, *node.code_file, node.identifier),
+                ]
+            )
             # current_node_dependencies = node.get_dependencies()
             # dependencies["code_dependencies"].update(current_node_dependencies["code_dependencies"])
             # dependencies["system_lib"].update(current_node_dependencies["system_lib"])
@@ -234,12 +277,22 @@ class CodeNode(NodeBase):
             # dependencies["local_lib"].update(current_node_dependencies["local_lib"])
         return dependencies
 
+
 class FunctionCodeNode(FunctionNode, CodeNode):
+    @field_validator("tags")
+    @classmethod
+    def validate_tags(cls, tags: set[Tags]) -> set[Tags]:
+        """Auto-add the function tags after model initialization.
+        """
+        tags.add(Tags.FUNCTION)
+        return tags
+
     @model_validator(mode="before")
     @classmethod
     def validate_identifier(cls, data: dict[str, Any]) -> dict[str, Any]:
         data["identifier"] = data["function_name"]
         return data
+
 
 class ModuleNode(ClassNode, CodeNode):
     """A node backed by a custom ``nn.Module`` whose source is stored in ``code``.
@@ -251,11 +304,20 @@ class ModuleNode(ClassNode, CodeNode):
     be emitted before this one (transitive code dependencies).
     """
 
+    @field_validator("tags")
+    @classmethod
+    def validate_tags(cls, tags: set[Tags]) -> set[Tags]:
+        """Auto-add the module tags after model initialization.
+        """
+        tags.add(Tags.MODULE)
+        return tags
+
     @model_validator(mode="before")
     @classmethod
     def validate_identifier(cls, data: dict[str, Any]) -> dict[str, Any]:
         data["identifier"] = data["class_name"]
         return data
+
 
 class LibNode(ClassNode):
     """A node representing a library-provided class (e.g. ``nn.Flatten``).
@@ -263,11 +325,26 @@ class LibNode(ClassNode):
     Unlike ModuleNode, LibNode has no inline ``code`` -- it is simply imported
     from the library specified in the dependency sets.
     """
-    pass
+
+    @field_validator("tags")
+    @classmethod
+    def validate_tags(cls, tags: set[Tags]) -> set[Tags]:
+        """Auto-add the lib tags after model initialization.
+        """
+        tags.add(Tags.LIB)
+        return tags
 
 
 class ActivationNode(NodeBase):
     """A node representing an activation function resolved at runtime via ``get_activation(name)``."""
+
+    @field_validator("tags")
+    @classmethod
+    def validate_tags(cls, tags: set[Tags]) -> set[Tags]:
+        """Auto-add the activation tags after model initialization.
+        """
+        tags.add(Tags.ACTIVATION)
+        return tags
 
     def model_post_init(self, context: Any, /) -> None:
         """Auto-add the ``get_activation`` local dependency after model initialization."""
@@ -278,6 +355,7 @@ class ActivationNode(NodeBase):
         """Return the runtime lookup expression for this activation."""
         return f"get_activation('{self.name}')"
 
+
 class OperatorNode(NodeBase):
     """A node representing a mathematical operator resolved at runtime via ``get_operator_function(symbol)``."""
 
@@ -285,6 +363,14 @@ class OperatorNode(NodeBase):
         ...,
         description="The mathematical symbol for the operator (e.g. '+', '-', '*', '/', '@', 'T')",
     )
+
+    @field_validator("tags")
+    @classmethod
+    def validate_tags(cls, tags: set[Tags]) -> set[Tags]:
+        """Auto-add the operator tags after model initialization.
+        """
+        tags.add(Tags.OPERATOR)
+        return tags
 
     def model_post_init(self, context: Any, /) -> None:
         """Auto-add the ``get_operator_function`` local dependency after model initialization."""
@@ -296,9 +382,11 @@ class OperatorNode(NodeBase):
         return f"get_operator_function('{self.operator_symbol}')"
 
 
-class FunctionLibNode(LibNode):
-    """ A node representing a function that is a library function """
-    pass
+# class FunctionLibNode(LibNode):
+#     """A node representing a function that is a library function"""
+
+#     pass
+
 
 def main():
     test = ActivationNode(name="torch").get_assign_code()

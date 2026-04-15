@@ -2,16 +2,19 @@
 
 from schemas import __REQUIRED__, LibNode
 
-torchlib_dict: dict[str, LibNode] = {}
+torch_modules_dict: dict[str, LibNode] = {}
 
 
-def register_torchlib(lib_node: LibNode) -> None:
-    torchlib_dict[lib_node.name] = lib_node
+def register_torch_module(lib_node: LibNode) -> None:
+    torch_modules_dict[lib_node.name] = lib_node
+
+def get_torch_module(name: str) -> LibNode:
+    return torch_modules_dict[name]
 
 
 # ============================================= Pre-defined torch libraries =============================================
 # ============================================= Learnable Network Modules =============================================
-register_torchlib(
+register_torch_module(
     LibNode(
         name="linear",
         class_name="nn.Linear",
@@ -43,7 +46,7 @@ register_torchlib(
     )
 )
 
-register_torchlib(
+register_torch_module(
     LibNode(
         name="conv2d",
         class_name="nn.Conv2d",
@@ -108,7 +111,7 @@ register_torchlib(
 # ============================================= Non-Learnable Modules =============================================
 # Like Norm, Maxpool, etc
 
-register_torchlib(
+register_torch_module(
     LibNode(
         name="layernorm",
         class_name="nn.LayerNorm",
@@ -146,7 +149,7 @@ register_torchlib(
 )
 
 # ============================================= Tensor Manipulation Modules =============================================
-register_torchlib(
+register_torch_module(
     LibNode(
         name="flatten",
         class_name="nn.Flatten",

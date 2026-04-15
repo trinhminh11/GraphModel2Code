@@ -11,11 +11,12 @@ a self-contained ``utils.py`` in the output project.
 
 from typing import Literal, overload
 
-from schemas import ActivationNode, ModuleNode, OperatorNode
+from schemas import ActivationNode, LibNode, ModuleNode, OperatorNode
 
 from .activations import get_activation, register_activation
 from .net import get_module, register_module
 from .operators import get_operator, register_operator
+from .torch_modules import get_torch_module, register_torch_module
 
 # Pre-load the utils source that will be written verbatim into generated projects.
 with open("db/pytorch/utils.txt", "r") as f:
@@ -28,10 +29,11 @@ def get_node(node_type: Literal["activations"], node_name: str) -> ActivationNod
 def get_node(node_type: Literal["operators"], node_name: str) -> OperatorNode: ...
 @overload
 def get_node(node_type: Literal["modules"], node_name: str) -> ModuleNode: ...
-
+@overload
+def get_node(node_type: Literal["torch_modules"], node_name: str) -> LibNode: ...
 
 def get_node(
-    node_type: Literal["activations", "operators", "modules"],
+    node_type: Literal["activations", "operators", "modules", "torch_modules"],
     node_name: str,
 ):
     """Dispatch to the appropriate sub-registry based on *node_type* and return the matching node definition."""
@@ -41,6 +43,8 @@ def get_node(
         return get_operator(node_name)
     elif node_type == "modules":
         return get_module(node_name)
+    elif node_type == "torch_modules":
+        return get_torch_module(node_name)
     else:
         raise ValueError(f"Invalid node type: {node_type}")
 
@@ -49,8 +53,10 @@ __all__ = [
     "register_activation",
     "register_operator",
     "register_module",
+    "register_torch_module",
     "get_operator",
     "get_module",
+    "get_torch_module",
     "get_node",
     "utils_code",
 ]

@@ -13,7 +13,7 @@ from .state import register_module, get_module
 
 code_dict: dict[str, str] = {
     "mlp": '''
-class {class_name}(nn.Module):
+class {identifier}(nn.Module):
     """
     {description}
     """
@@ -55,7 +55,7 @@ class {class_name}(nn.Module):
         return self.net(X)
 ''',
     "gated": '''
-class {class_name}(nn.Module):
+class {identifier}(nn.Module):
     """
     {description}
     """
@@ -91,7 +91,7 @@ class {class_name}(nn.Module):
         return self.operator_fn(Y, self.gate(X))  # Y o gate(X)   (..., Exy)
 ''',
     "gated_net": '''
-class {class_name}(nn.Module):
+class {identifier}(nn.Module):
     """
     {description}
     """

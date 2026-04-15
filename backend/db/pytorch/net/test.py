@@ -18,11 +18,14 @@ register_module(
         name="dup",
         description="Duplicate (fan-out) node. Takes a single input tensor and returns two identical copies of it, enabling the same tensor to feed into multiple downstream nodes in the graph",
         class_name="Dup",
-        code="""
-class {class_name}(nn.Module):
+        code='''
+class {identifier}(nn.Module):
+    """
+    {description}
+    """
     def forward(self, X: Tensor) -> Tensor:
         return X, X
-""",
+''',
         third_party_dependencies={
             ("torch", "nn"),
             ("torch", "Tensor"),

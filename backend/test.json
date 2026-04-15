@@ -3,6 +3,17 @@
     "class_name": "Testing",
     "kwargs": {},
     "nodes": {
+        "torch_modules": {
+            "linear": [
+                {
+                    "node_id": "lin",
+                    "kwargs": {
+                        "in_features": 64,
+                        "out_features": 64
+                    }
+                }
+            ]
+        },
         "modules": {
             "mlp": [
                 {
@@ -59,7 +70,8 @@
         "X": ["Tensor", "__required__"]
     },
     "edges": [
-        {"prev_nodes": [{"node_name": "inputs", "input_gate": "X", "input_receive": "X"}], "node_name": "mlp_first", "output_gates": ["__default__"]},
+        {"prev_nodes": [{"node_name": "inputs", "input_gate": "X", "input_receive": "input"}], "node_name": "lin", "output_gates": ["__default__"]},
+        {"prev_nodes": [{"node_name": "lin", "input_gate": "__default__", "input_receive": "X"}], "node_name": "mlp_first", "output_gates": ["__default__"]},
         {"prev_nodes": [{"node_name": "mlp_first", "input_gate": "__default__", "input_receive": "X"}], "node_name": "dup", "output_gates": ["__default__0", "out_1"]},
         {"prev_nodes": [{"node_name": "dup", "input_gate": "__default__0", "input_receive": "X"}], "node_name": "gated_net_1", "output_gates": ["__default__"]},
         {"prev_nodes": [{"node_name": "gated_net_1", "input_gate": "__default__", "input_receive": "X"}, {"node_name": "dup", "input_gate": "__default__0", "input_receive": "Y"}], "node_name": "add", "output_gates": ["__default__"]},

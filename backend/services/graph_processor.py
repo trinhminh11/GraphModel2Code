@@ -320,7 +320,7 @@ class {data.class_name}(nn.Module):
             body += f"\n        # {node_type}\n"
             for node_name, nodes in nodes_base.items():
                 for node in nodes:
-                    body += f"        self.{node.node_id} = {get_node(node_type, node_name).get_var_code(**node.kwargs)}\n"
+                    body += f"        self.{node.node_id} = {get_node(node_type, node_name).get_assign_code(**node.kwargs)}\n"
         body += "\n"
         return body
 
@@ -377,6 +377,7 @@ class {data.class_name}(nn.Module):
                     f"        {output_gates[0]} = self.{node.node_id}({input_str})\n"
                 )
             else:
+                # if the node is a fan-out node, we need to assign the output gates to the node
                 lhs = ", ".join(output_gates[i] for i in range(n_outputs))
                 body += f"        {lhs} = self.{node.node_id}({input_str})\n"
 

@@ -40,13 +40,19 @@ class Nodes(BaseModel):
         description="Mathematical operator nodes (e.g. add, matmul). Key is the operator name in the registry, value is a list of instances",
     )
 
+    torch_modules: dict[str, list[NodeProperties]] = Field(
+        default_factory=dict,
+        description="PyTorch library module nodes (e.g. nn.Linear, nn.Flatten). Key is the module name in the registry, value is a list of instances",
+    )
 
-    def to_shallow_dict(self) -> dict[Literal["modules", "activations", "operators"], dict[str, list[NodeProperties]]]:
+
+    def to_shallow_dict(self) -> dict[Literal["modules", "activations", "operators", "torch_modules"], dict[str, list[NodeProperties]]]:
         """Return all four node categories as a plain dict keyed by category name."""
         return {
             "modules": self.modules,
             "activations": self.activations,
             "operators": self.operators,
+            "torch_modules": self.torch_modules,
         }
 
 

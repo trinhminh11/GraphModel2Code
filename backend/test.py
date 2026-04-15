@@ -18,7 +18,12 @@ raise_flow_check = True
                 ---------
                 | Input |
                 ---------
-                    | X-> X
+                    | X-> input
+                    v
+                ---------
+               |nn.Linear|
+                ---------
+                    | -> X
                     v
                 ---------
                 |  MLP  |

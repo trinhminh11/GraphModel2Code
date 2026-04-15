@@ -10,10 +10,11 @@ Defines the base schema (NodeBase) and its specializations:
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 import ast
 from typing import Any
 from .base import __REQUIRED__
+from string import Formatter
 
 
 def validate_literal(type_: str, default: Any):
@@ -112,62 +113,19 @@ class NodeBase(BaseModel):
             "local_lib": self.local_dependencies.copy(),
         }
 
-    def get_var_code(self) -> str:
-        raise NotImplementedError("get_var_code is not implemented for NodeBase")
+    def get_assign_code(self) -> str:
+        raise NotImplementedError("get_assign_code is not implemented for NodeBase")
 
     def get_creation_code(self) -> str:
         raise NotImplementedError("get_creation_code is not implemented for NodeBase")
 
-class ModuleNode(NodeBase):
-    """A node backed by a custom ``nn.Module`` whose source is stored in ``code``.
-
-    ``code`` is a string template that uses ``{class_name}``, ``{description}``,
-    and any keys from ``node_dependencies`` as format placeholders.
-
-    ``node_dependencies`` lists other ModuleNodes whose generated classes must
-    be emitted before this one (transitive code dependencies).
-    """
-
+class ClassNode(NodeBase):
     class_name: str = Field(
         ...,
-        description="Python class name used in the generated code (e.g. 'MLP', 'GatedNet')",
-    )
-    code: str = Field(
-        ...,
-        description="Python source template for the nn.Module class. Format placeholders: {class_name}, {description}, and dependency class names",
-    )
-    node_dependencies: dict[str, ModuleNode] = Field(
-        default_factory=dict,
-        description="Map of placeholder name -> ModuleNode for nodes whose classes must be generated before this one",
+        description="Fully-qualified or short name of the library class (e.g. 'nn.Flatten')",
     )
 
-    code_file: tuple[str, ...] = Field(
-        default=...,
-        description="the tuple that guide the code generator to generate the code for this module (e.g (net, common) -> net/common.py)",
-    )
-
-
-    def get_creation_code(self) -> str:
-        """Return the full class source for this module, including any dependency classes prepended."""
-        code_str = ""
-        # for name, node in self.node_dependencies.items():
-        #     current_code = node.get_creation_code()
-        #     if current_code is not None:
-        #         code_str += current_code
-        #         code_str += "\n"
-
-        code_str += self.code.format(
-            class_name=self.class_name,
-            description=self.description,
-            **{
-                node_name: node.class_name
-                for node_name, node in self.node_dependencies.items()
-            },
-        )
-
-        return code_str
-
-    def get_var_code(self, include_default_value: bool = False, **kwargs) -> str:
+    def get_assign_code(self, include_default_value: bool = False, **kwargs) -> str:
         """Build an instantiation expression like ``ClassName(arg=value, ...)``.
 
         Resolves ``#ref/key`` strings to bare variable references and
@@ -198,6 +156,69 @@ class ModuleNode(NodeBase):
 
         return f"{self.class_name}({", ".join(kwargs_lst)})"
 
+class FunctionNode(NodeBase):
+    """ A node representing a function that can use right away without defining a variable for it
+    """
+    function_name: str = Field(
+        ...,
+        description="The name of the function to use",
+    ) 
+
+class CodeNode(NodeBase):
+    identifier: str = Field(
+        ...,
+        description="The identifier of the code node",
+    )
+    code: str = Field(
+        ...,
+        description="Python source template for the nn.Module class. Format placeholders: {identifier}, {description}, and dependency class names",
+    )
+    node_dependencies: dict[str, CodeNode] = Field(
+        default_factory=dict,
+        description="Map of placeholder name -> ModuleNode for nodes whose classes must be generated before this one",
+    )
+
+    code_file: tuple[str, ...] = Field(
+        default=...,
+        description="the tuple that guide the code generator to generate the code for this module (e.g (net, common) -> net/common.py)",
+    )
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, code: str) -> str:
+        identifier_check = False
+        description_check = False
+        for _, field, *_ in Formatter().parse(code):
+            if field == "identifier":
+                identifier_check = True
+            elif field == "description":
+                description_check = True
+        if not identifier_check:
+            raise ValueError(f"The code {code} is not a valid code template, it must contain the identifier field")
+        if not description_check:
+            raise ValueError(f"The code {code} is not a valid code template, it must contain the description field")
+        return code
+
+    def get_creation_code(self) -> str:
+        """Return the full class source for this module, including any dependency classes prepended."""
+        code_str = ""
+        # for name, node in self.node_dependencies.items():
+        #     current_code = node.get_creation_code()
+        #     if current_code is not None:
+        #         code_str += current_code
+        #         code_str += "\n"
+
+        code_str += self.code.format(
+            identifier=self.identifier,
+            description=self.description,
+            **{
+                node_name: node.identifier
+                for node_name, node in self.node_dependencies.items()
+            },
+        )
+
+        return code_str
+
     def get_dependencies(self, code_root: tuple[str, ...] = None):
         """Merge this node's dependencies with all transitive ``node_dependencies``."""
         dependencies = super().get_dependencies()
@@ -205,7 +226,7 @@ class ModuleNode(NodeBase):
         code_root = code_root if code_root is not None else tuple()
 
         for node_name, node in self.node_dependencies.items():
-            dependencies["code_dependencies"] = set([(*code_root, *node.code_file, node.class_name), ])
+            dependencies["code_dependencies"] = set([(*code_root, *node.code_file, node.identifier), ])
             # current_node_dependencies = node.get_dependencies()
             # dependencies["code_dependencies"].update(current_node_dependencies["code_dependencies"])
             # dependencies["system_lib"].update(current_node_dependencies["system_lib"])
@@ -213,17 +234,36 @@ class ModuleNode(NodeBase):
             # dependencies["local_lib"].update(current_node_dependencies["local_lib"])
         return dependencies
 
+class FunctionCodeNode(FunctionNode, CodeNode):
+    @model_validator(mode="before")
+    @classmethod
+    def validate_identifier(cls, data: dict[str, Any]) -> dict[str, Any]:
+        data["identifier"] = data["function_name"]
+        return data
 
-class LibNode(NodeBase):
+class ModuleNode(ClassNode, CodeNode):
+    """A node backed by a custom ``nn.Module`` whose source is stored in ``code``.
+
+    ``code`` is a string template that uses ``{class_name}``, ``{description}``,
+    and any keys from ``node_dependencies`` as format placeholders.
+
+    ``node_dependencies`` lists other ModuleNodes whose generated classes must
+    be emitted before this one (transitive code dependencies).
+    """
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_identifier(cls, data: dict[str, Any]) -> dict[str, Any]:
+        data["identifier"] = data["class_name"]
+        return data
+
+class LibNode(ClassNode):
     """A node representing a library-provided class (e.g. ``nn.Flatten``).
 
     Unlike ModuleNode, LibNode has no inline ``code`` -- it is simply imported
     from the library specified in the dependency sets.
     """
-    class_name: str = Field(
-        ...,
-        description="Fully-qualified or short name of the library class (e.g. 'nn.Flatten')",
-    )
+    pass
 
 
 class ActivationNode(NodeBase):
@@ -234,7 +274,7 @@ class ActivationNode(NodeBase):
         super().model_post_init(context)
         self.local_dependencies.add(("utils", "get_activation"))
 
-    def get_var_code(self) -> str:
+    def get_assign_code(self) -> str:
         """Return the runtime lookup expression for this activation."""
         return f"get_activation('{self.name}')"
 
@@ -251,12 +291,17 @@ class OperatorNode(NodeBase):
         super().model_post_init(context)
         self.local_dependencies.add(("utils", "get_operator_function"))
 
-    def get_var_code(self) -> str:
+    def get_assign_code(self) -> str:
         """Return the runtime lookup expression for this operator."""
         return f"get_operator_function('{self.operator_symbol}')"
 
+
+class FunctionLibNode(LibNode):
+    """ A node representing a function that is a library function """
+    pass
+
 def main():
-    test = ActivationNode(name="torch").get_var_code()
+    test = ActivationNode(name="torch").get_assign_code()
 
     print(test)
 

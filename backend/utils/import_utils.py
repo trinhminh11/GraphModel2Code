@@ -140,9 +140,13 @@ def get_dependencies_str(dependencies: Sequence[Sequence[str]], add_dot: bool = 
 def main():
     test = [["torch", "nn"], ["torch", "Tensor"], ["torch", "nn", "functional as F"], ["torch", "nn", "Module"]]
     # expected:
-    # import torch as th
     # from torch import nn, Tensor
     # from torch.nn import Module, functional as F
+    # currently:
+    # from torch.nn import functional as F
+    # from torch.nn import Module
+    # from torch import nn
+    # from torch import Tensor
     tree = DependencyTree()
     tree.add_dependencies(test)
 

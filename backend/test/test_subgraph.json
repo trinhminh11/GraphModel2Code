@@ -41,8 +41,8 @@
         "X": ["Tensor", "__required__", "The input tensor"]
     },
     "edges": [
-        {"prev_nodes": [{"node_id": "inputs", "input_gate": 0, "input_receive": "X"}], "node_id": "mlp", "output_gates": ["X"]},
-        {"prev_nodes": [{"node_id": "mlp", "input_gate": 0, "input_receive": "X"}], "node_id": "block", "output_gates": ["X"]},
+        {"prev_nodes": [{"node_id": "inputs", "input_gate": 0, "input_receive": "X"}], "node_id": "mlp", "output_gates": ["__default__"]},
+        {"prev_nodes": [{"node_id": "mlp", "input_gate": 0, "input_receive": "X"}], "node_id": "block", "output_gates": ["__default__"]},
         {"prev_nodes": [{"node_id": "block", "input_gate": 0, "input_receive": "X"}], "node_id": "outputs", "output_gates": []}
     ],
     "dependencies": [["torch", "Tensor"], ["torch", "nn"]],

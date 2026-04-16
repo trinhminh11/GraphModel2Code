@@ -253,7 +253,7 @@ class CodeNode(NodeBase):
         }
 
         for _, node in self.node_dependencies.items():
-            dependencies["code_dependencies"].add((*code_root, node.identifier))
+            dependencies["code_dependencies"].add((*code_root, *self.code_file, node.identifier))
 
         return dependencies
 

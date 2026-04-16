@@ -2,8 +2,18 @@ from __future__ import annotations
 
 from typing import Any, Callable, Iterable, Literal, TypeAlias
 
-from db.pytorch import get_node as get_node_db, utils_code
-from schemas import __ANY__, __REQUIRED__, Graph, ModuleNode, Tags, LibNode, ActivationNode, OperatorNode
+from db.pytorch import get_node as get_node_db
+from db.pytorch import utils_code
+from schemas import (
+    __ANY__,
+    __REQUIRED__,
+    ActivationNode,
+    Graph,
+    LibNode,
+    ModuleNode,
+    OperatorNode,
+    Tags,
+)
 from utils.import_utils import get_dependencies_str
 
 from .log import logger
@@ -12,9 +22,20 @@ raise_flow_check = False
 
 
 DBNodeTypes: TypeAlias = Literal["activations", "operators", "modules", "torch_modules"]
-NodeType: TypeAlias = Literal["inputs", "outputs", "modules", "activations", "operators", "torch_modules", "subgraphs"]
+NodeType: TypeAlias = Literal[
+    "inputs",
+    "outputs",
+    "modules",
+    "activations",
+    "operators",
+    "torch_modules",
+    "subgraphs",
+]
 
-GetNodeFuncType: TypeAlias = Callable[[NodeType, str], ModuleNode | LibNode | ActivationNode | OperatorNode]
+GetNodeFuncType: TypeAlias = Callable[
+    [NodeType, str], ModuleNode | LibNode | ActivationNode | OperatorNode
+]
+
 
 class FileNode:
     def __init__(self, file_tree: str = None):
@@ -37,12 +58,8 @@ class FileNode:
     def file_str(self) -> str:
         if self._file_str is not None:
             return self._file_str
-        return f"""# Imports
-{get_dependencies_str(self.dependencies)}
 
-# Code
-{self.code_str}
-"""
+        return f"{get_dependencies_str(self.dependencies)}\n#Code\n{self.code_str}"
 
     def add_dependencies(self, dependencies: set[str]):
         self.dependencies.update(dependencies)
@@ -222,10 +239,13 @@ class CodeGenerator:
     building the constructor signature, import statements, ``__init__`` body,
     ``forward`` signature and body, and auxiliary module files.
     """
+
     def __init__(self):
         self.subgraphs: dict[str, ModuleNode] = {}
 
-    def get_node(self, node_type: NodeType, node_name: str) -> ModuleNode | LibNode | ActivationNode | OperatorNode:
+    def get_node(
+        self, node_type: NodeType, node_name: str
+    ) -> ModuleNode | LibNode | ActivationNode | OperatorNode:
         if node_type == "subgraphs":
             return self.subgraphs[node_name]
         else:
@@ -242,21 +262,10 @@ class CodeGenerator:
 
         dependencies.update(self._build_modules_import(data.nodes.modules.keys()))
 
-        main_code = f'''class {{identifier}}(nn.Module):
-    """
-    {{description}}
-    """
-    def __init__(self, {kwargs_str}):
-        super().__init__()
-        {init_body}
-    def forward(self, {forward_sig}):
-{forward_body}'''
+        main_code = f'class {{identifier}}(nn.Module):\n    """\n    {{description}}"""\n    def __init__(self, {kwargs_str}):\n        super().__init__()\n{init_body}\n    def forward(self, {forward_sig}):\n{forward_body}'
 
-        outputs: list[tuple[str, str]] = []
 
-        for prev_node, input_gate, _ in graph.nodes["outputs"].prev:
-            outputs.append(self.get_node(prev_node.node_type, prev_node.node_name).outputs[input_gate])
-
+        outputs = [self.get_node(prev_node.node_type, prev_node.node_name).outputs[input_gate] for prev_node, input_gate, _ in graph.nodes["outputs"].prev]
 
         self.subgraphs[data.name] = ModuleNode(
             display_name=data.name,
@@ -268,8 +277,10 @@ class CodeGenerator:
             kwargs=data.kwargs,
             forward_kwargs=data.inputs,
             outputs=outputs,
-            code_file=("subgraphs", ),
-            tags={Tags.CUSTOM, },
+            code_file=("subgraphs",),
+            tags={
+                Tags.CUSTOM,
+            },
         )
 
     def generate(self, data: Graph) -> FileTree:
@@ -281,7 +292,6 @@ class CodeGenerator:
         self._build_subgraphs(data.subgraphs)
 
         graph = ExecuteGraph(data, self.get_node)
-
 
         kwargs_str = self._build_init_kwargs(data.kwargs)
         dependencies = self._build_dependencies(data)
@@ -306,14 +316,12 @@ class {data.class_name}(nn.Module):
 
         modules_tree = self._build_modules_folder(data.get_module_nodes())
 
-
         return {
             "main": FileNode(main_code),
             "modules": modules_tree,
             "utils": FileNode(utils_code),
             "subgraphs": self._build_subgraphs_file(),
         }
-
 
     def _build_init_kwargs(self, kwargs: dict[str, tuple[str, Any, str]]) -> str:
         """Build the ``__init__`` parameter signature string from ``data.kwargs``.
@@ -405,14 +413,19 @@ class {data.class_name}(nn.Module):
 
         for node in graph.return_by_level():
             if node.node_name == "outputs":
-                return_parts = [prev_node.output_gates[input_gate] for prev_node, input_gate, input_receive in node.prev]
+                return_parts = [
+                    prev_node.output_gates[input_gate]
+                    for prev_node, input_gate, input_receive in node.prev
+                ]
                 return_str = ", ".join(return_parts)
                 body += f"        return {return_str}\n"
                 break
 
             input_parts = []
             for prev_node, input_gate, input_receive in node.prev:
-                input_parts.append(f"{input_receive}={prev_node.output_gates[input_gate]}")
+                input_parts.append(
+                    f"{input_receive}={prev_node.output_gates[input_gate]}"
+                )
             input_str = ", ".join(input_parts)
 
             output_gates = node.output_gates
@@ -516,17 +529,20 @@ __all__ = [
     def _build_subgraphs_file(self):
         file = FileNode()
 
-        for subgraph_name, subgraph_node in self.subgraphs.items():
-            file.add_code_class(subgraph_node)
-            subgraph_dependencies = subgraph_node.get_dependencies()
+        for subgraph in self.subgraphs.values():
+            file.add_code_class(subgraph)
+            subgraph_dependencies = subgraph.get_dependencies()
             file.add_dependencies(subgraph_dependencies["dependencies"])
             file.add_dependencies(subgraph_dependencies["code_dependencies"])
 
         return file
 
     def _build_modules_import(self, node_names: Iterable[str]) -> set[tuple[str, ...]]:
-        return {("modules", self.get_node("modules", module_name).identifier) for module_name in node_names}
+        return {
+            ("modules", self.get_node("modules", module_name).identifier)
+            for module_name in node_names
+        }
 
     def _build_subgraphs(self, subgraphs: dict[str, Graph]) -> FileNode:
-        for subgraph_name, subgraph_data in subgraphs.items():
-            self.generate_subgraph(subgraph_data)
+        for subgraph in subgraphs.values():
+            self.generate_subgraph(subgraph)

@@ -111,10 +111,13 @@ def main():
     """CLI entry point: load a test graph JSON, generate code, and write to temp/."""
     import json
     import os
+    import shutil
+
+    shutil.rmtree("temp", ignore_errors=True)
 
     os.makedirs("temp", exist_ok=True)
 
-    with open("test/test_subgraph.json", "r") as f:
+    with open("test/test_attn.json", "r") as f:
         data = json.load(f)
 
     generator = CodeGenerator()
